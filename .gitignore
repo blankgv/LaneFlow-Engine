@@ -1,0 +1,14 @@
+target/
+*.class
+*.jar
+*.war
+
+.idea/
+*.iml
+.vscode/
+*.DS_Store
+
+application-local.yml
+.env
+.claude/
+ROADMAP.md

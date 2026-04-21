@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: laneflow-engine
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://admin:passw0rd@localhost:27017/laneflow?authSource=admin&replicaSet=rs0}
+      auto-index-creation: true
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:laneflow-super-secret-key-for-jwt-signing-must-be-at-least-256-bits-long-2024}
+    expiration-ms: 86400000
+
+springdoc:
+  swagger-ui:
+    path: /docs          # igual que FastAPI: http://localhost:8080/docs
+    operations-sorter: method
+    tags-sorter: alpha
+  api-docs:
+    path: /api-docs
+
+logging:
+  level:
+    com.laneflow: DEBUG
