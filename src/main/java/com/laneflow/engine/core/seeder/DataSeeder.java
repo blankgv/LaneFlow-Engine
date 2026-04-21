@@ -7,8 +7,8 @@ import com.laneflow.engine.modules.admin.model.Staff;
 import com.laneflow.engine.modules.admin.repository.DepartmentRepository;
 import com.laneflow.engine.modules.admin.repository.RoleRepository;
 import com.laneflow.engine.modules.admin.repository.StaffRepository;
-import com.laneflow.engine.modules.auth.model.User;
-import com.laneflow.engine.modules.auth.repository.UserRepository;
+import com.laneflow.engine.modules.admin.model.User;
+import com.laneflow.engine.modules.admin.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -103,17 +103,27 @@ public class DataSeeder implements ApplicationRunner {
             log.info("Usuarios ya existen, omitiendo seed.");
             return;
         }
-        String adminRoleId = roleRepository.findByCode("ADMINISTRADOR")
-                .orElseThrow().getId();
 
-        userRepository.save(User.builder()
-                .username("admin")
-                .password(passwordEncoder.encode("passw0rd"))
-                .email("admin@laneflow.com")
-                .roleId(adminRoleId)
-                .build());
+        Map<String, String> roleIds = roleRepository.findAll().stream()
+                .collect(Collectors.toMap(Role::getCode, Role::getId));
+        Map<String, String> staffIds = staffRepository.findAll().stream()
+                .collect(Collectors.toMap(Staff::getCode, Staff::getId));
 
-        log.info("Seed: usuario 'admin' creado (password: passw0rd).");
+        String encoded = passwordEncoder.encode("passw0rd");
+
+        userRepository.saveAll(List.of(
+                user("admin",    "admin@laneflow.com",        null,                    roleIds.get("ADMINISTRADOR"), encoded),
+                user("cmendoza", "c.mendoza@laneflow.com",    staffIds.get("EMP-001"), roleIds.get("SUPERVISOR"),    encoded),
+                user("mlopez",   "m.lopez@laneflow.com",      staffIds.get("EMP-002"), roleIds.get("SUPERVISOR"),    encoded),
+                user("atorres",  "a.torres@laneflow.com",     staffIds.get("EMP-003"), roleIds.get("FUNCIONARIO"),   encoded),
+                user("lramirez", "l.ramirez@laneflow.com",    staffIds.get("EMP-004"), roleIds.get("FUNCIONARIO"),   encoded),
+                user("dherrera", "d.herrera@laneflow.com",    staffIds.get("EMP-005"), roleIds.get("FUNCIONARIO"),   encoded),
+                user("jperez",   "j.perez@external.com",      null,                    roleIds.get("SOLICITANTE"),   encoded),
+                user("svargas",  "s.vargas@laneflow.com",     staffIds.get("EMP-006"), roleIds.get("FUNCIONARIO"),   encoded),
+                user("rcastro",  "r.castro@laneflow.com",     staffIds.get("EMP-007"), roleIds.get("SUPERVISOR"),    encoded)
+        ));
+
+        log.info("Seed: 8 usuarios creados (password: passw0rd).");
     }
 
     private Department dept(String code, String name, String parentId) {
@@ -129,5 +139,15 @@ public class DataSeeder implements ApplicationRunner {
     private Role role(String code, String name, String description, List<String> permissions) {
         return Role.builder().code(code).name(name).description(description)
                 .permissions(permissions).build();
+    }
+
+    private User user(String username, String email, String staffId, String roleId, String encodedPassword) {
+        return User.builder()
+                .username(username)
+                .password(encodedPassword)
+                .email(email)
+                .staffId(staffId)
+                .roleId(roleId)
+                .build();
     }
 }

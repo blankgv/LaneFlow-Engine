@@ -2,8 +2,8 @@ package com.laneflow.engine.core.security;
 
 import com.laneflow.engine.modules.admin.model.Role;
 import com.laneflow.engine.modules.admin.repository.RoleRepository;
-import com.laneflow.engine.modules.auth.model.User;
-import com.laneflow.engine.modules.auth.repository.UserRepository;
+import com.laneflow.engine.modules.admin.model.User;
+import com.laneflow.engine.modules.admin.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;

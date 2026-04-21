@@ -2,6 +2,8 @@ package com.laneflow.engine.modules.auth.service;
 
 import com.laneflow.engine.core.security.JwtService;
 import com.laneflow.engine.core.security.UserPrincipal;
+import com.laneflow.engine.modules.admin.model.User;
+import com.laneflow.engine.modules.admin.repository.UserRepository;
 import com.laneflow.engine.modules.auth.model.BlacklistedToken;
 import com.laneflow.engine.modules.auth.repository.BlacklistedTokenRepository;
 import com.laneflow.engine.modules.auth.request.LoginRequest;
@@ -14,6 +16,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 
@@ -24,6 +27,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authManager;
     private final JwtService jwtService;
     private final BlacklistedTokenRepository blacklistedTokenRepository;
+    private final UserRepository userRepository;
 
     @Value("${app.jwt.expiration-ms}")
     private long expirationMs;
@@ -36,6 +40,11 @@ public class AuthServiceImpl implements AuthService {
 
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
         String token = jwtService.generateToken(principal);
+
+        userRepository.findByUsername(principal.getUsername()).ifPresent(user -> {
+            user.setLastLoginAt(LocalDateTime.now());
+            userRepository.save(user);
+        });
 
         List<String> permissions = principal.authorities().stream()
                 .map(a -> a.getAuthority())

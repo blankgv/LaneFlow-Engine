@@ -1,4 +1,4 @@
-package com.laneflow.engine.modules.auth.model;
+package com.laneflow.engine.modules.admin.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
