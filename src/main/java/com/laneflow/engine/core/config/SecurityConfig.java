@@ -17,6 +17,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import static org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher;
 
 @Configuration
 @EnableWebSecurity
@@ -34,11 +35,13 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/v1/auth/**",
-                                "/ws/**",
-                                "/docs/**", "/docs.html",
-                                "/api-docs/**",
-                                "/swagger-ui/**"
+                                antMatcher("/api/v1/auth/**"),
+                                antMatcher("/ws/**"),
+                                antMatcher("/docs/**"),
+                                antMatcher("/docs.html"),
+                                antMatcher("/api-docs/**"),
+                                antMatcher("/swagger-ui/**"),
+                                antMatcher("/error")
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

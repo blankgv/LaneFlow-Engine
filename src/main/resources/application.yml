@@ -5,6 +5,14 @@ spring:
     mongodb:
       uri: ${SPRING_DATA_MONGODB_URI:mongodb://admin:passw0rd@localhost:27017/laneflow?authSource=admin&replicaSet=rs0}
       auto-index-creation: true
+  mail:
+    host: ${MAIL_HOST:sandbox.smtp.mailtrap.io}
+    port: ${MAIL_PORT:2525}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
 
 server:
   port: 8080
@@ -13,10 +21,15 @@ app:
   jwt:
     secret: ${JWT_SECRET:laneflow-super-secret-key-for-jwt-signing-must-be-at-least-256-bits-long-2024}
     expiration-ms: 86400000
+  mail:
+    from: noreply@laneflow.com
+    reset-password-url: ${FRONTEND_URL:http://localhost:3000}/reset-password
+  reset-token:
+    expiration-minutes: 60
 
 springdoc:
   swagger-ui:
-    path: /docs          # igual que FastAPI: http://localhost:8080/docs
+    path: /docs
     operations-sorter: method
     tags-sorter: alpha
   api-docs:

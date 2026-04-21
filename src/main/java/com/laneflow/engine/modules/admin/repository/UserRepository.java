@@ -11,4 +11,5 @@ public interface UserRepository extends MongoRepository<User, String> {
     List<User> findByActiveTrueOrderByUsernameAsc();
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
+    Optional<User> findByEmail(String email);
 }

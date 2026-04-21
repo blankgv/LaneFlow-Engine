@@ -112,7 +112,7 @@ public class DataSeeder implements ApplicationRunner {
         String encoded = passwordEncoder.encode("passw0rd");
 
         userRepository.saveAll(List.of(
-                user("admin",    "admin@laneflow.com",        null,                    roleIds.get("ADMINISTRADOR"), encoded),
+                user("admin",    "emanuel.gutierrez.vasquez@gmail.com", null,                    roleIds.get("ADMINISTRADOR"), encoded),
                 user("cmendoza", "c.mendoza@laneflow.com",    staffIds.get("EMP-001"), roleIds.get("SUPERVISOR"),    encoded),
                 user("mlopez",   "m.lopez@laneflow.com",      staffIds.get("EMP-002"), roleIds.get("SUPERVISOR"),    encoded),
                 user("atorres",  "a.torres@laneflow.com",     staffIds.get("EMP-003"), roleIds.get("FUNCIONARIO"),   encoded),

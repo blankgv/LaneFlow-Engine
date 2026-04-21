@@ -2,6 +2,8 @@ package com.laneflow.engine.modules.auth.controller;
 
 import com.laneflow.engine.core.common.ApiVersion;
 import com.laneflow.engine.modules.auth.request.LoginRequest;
+import com.laneflow.engine.modules.auth.request.RecoverRequest;
+import com.laneflow.engine.modules.auth.request.ResetPasswordRequest;
 import com.laneflow.engine.modules.auth.response.LoginResponse;
 import com.laneflow.engine.modules.auth.service.AuthService;
 import jakarta.validation.Valid;
@@ -24,6 +26,19 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authHeader) {
         authService.logout(authHeader.substring(7));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/recover")
+    public ResponseEntity<Void> requestRecovery(@Valid @RequestBody RecoverRequest request) {
+        authService.requestPasswordRecovery(request);
+        // Siempre 202 aunque el email no exista — no revelamos si está registrado
+        return ResponseEntity.accepted().build();
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
         return ResponseEntity.noContent().build();
     }
 }
