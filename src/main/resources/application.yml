@@ -3,13 +3,21 @@ spring:
     name: laneflow-engine
   data:
     mongodb:
-      uri: ${SPRING_DATA_MONGODB_URI:mongodb://admin:passw0rd@localhost:27017/laneflow?authSource=admin&replicaSet=rs0}
+      uri: ${SPRING_DATA_MONGODB_URI}
       auto-index-creation: true
+  datasource:
+    url: ${PG_URI}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
   mail:
-    host: ${MAIL_HOST:sandbox.smtp.mailtrap.io}
-    port: ${MAIL_PORT:2525}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
@@ -17,13 +25,24 @@ spring:
 server:
   port: 8080
 
+camunda:
+  bpm:
+    database:
+      schema-update: true
+    admin-user:
+      id: ${CAMUNDA_ADMIN_USER}
+      password: ${CAMUNDA_ADMIN_PASSWORD}
+      first-name: Admin
+    history-level: audit
+    default-serialization-format: application/json
+
 app:
   jwt:
-    secret: ${JWT_SECRET:laneflow-super-secret-key-for-jwt-signing-must-be-at-least-256-bits-long-2024}
+    secret: ${JWT_SECRET}
     expiration-ms: 86400000
   mail:
-    from: noreply@laneflow.com
-    reset-password-url: ${FRONTEND_URL:http://localhost:3000}/reset-password
+    from: ${MAIL_FROM}
+    reset-password-url: ${FRONTEND_URL}/reset-password
   reset-token:
     expiration-minutes: 60
 
@@ -38,3 +57,4 @@ springdoc:
 logging:
   level:
     com.laneflow: DEBUG
+    org.camunda: WARN

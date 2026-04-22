@@ -84,6 +84,26 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- Camunda 7 Spring Boot Starter -->
+        <dependency>
+            <groupId>org.camunda.bpm.springboot</groupId>
+            <artifactId>camunda-bpm-spring-boot-starter</artifactId>
+            <version>7.21.0</version>
+        </dependency>
+
+        <!-- Spring Data JPA (requerido por Camunda) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL Driver (para Camunda) -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- OpenAPI / Swagger UI (equivalente al /docs de FastAPI) -->
         <dependency>
             <groupId>org.springdoc</groupId>
