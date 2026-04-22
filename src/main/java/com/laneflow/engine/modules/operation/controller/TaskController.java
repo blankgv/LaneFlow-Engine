@@ -2,8 +2,11 @@ package com.laneflow.engine.modules.operation.controller;
 
 import com.laneflow.engine.core.common.ApiVersion;
 import com.laneflow.engine.core.common.Permission;
+import com.laneflow.engine.modules.operation.request.CompleteTaskRequest;
+import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.operation.response.TaskResponse;
 import com.laneflow.engine.modules.operation.service.TaskService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,6 +38,13 @@ public class TaskController {
     @PreAuthorize("hasAuthority('" + Permission.TRAMITE_WRITE + "')")
     public ResponseEntity<TaskResponse> claim(@PathVariable String taskId) {
         return ResponseEntity.ok(service.claim(taskId, currentUsername()));
+    }
+
+    @PostMapping("/{taskId}/complete")
+    @PreAuthorize("hasAuthority('" + Permission.TRAMITE_WRITE + "')")
+    public ResponseEntity<ProcedureResponse> complete(@PathVariable String taskId,
+                                                       @Valid @RequestBody CompleteTaskRequest request) {
+        return ResponseEntity.ok(service.complete(taskId, request, currentUsername()));
     }
 
     private String currentUsername() {

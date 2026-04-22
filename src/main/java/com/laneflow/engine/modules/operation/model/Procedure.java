@@ -47,6 +47,12 @@ public class Procedure {
     private String currentAssigneeUsername;
     private LocalDateTime claimedAt;
     private Map<String, Object> formData;
+    private String lastAction;
+    private String lastComment;
+    private String lastCompletedTaskId;
+    private String lastCompletedTaskName;
+    private String lastCompletedBy;
+    private LocalDateTime lastCompletedAt;
     private String startedBy;
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;

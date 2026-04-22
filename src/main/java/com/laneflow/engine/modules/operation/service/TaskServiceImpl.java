@@ -7,7 +7,10 @@ import com.laneflow.engine.modules.admin.repository.DepartmentRepository;
 import com.laneflow.engine.modules.admin.repository.StaffRepository;
 import com.laneflow.engine.modules.admin.repository.UserRepository;
 import com.laneflow.engine.modules.operation.model.Procedure;
+import com.laneflow.engine.modules.operation.model.enums.ProcedureStatus;
 import com.laneflow.engine.modules.operation.repository.ProcedureRepository;
+import com.laneflow.engine.modules.operation.request.CompleteTaskRequest;
+import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.operation.response.TaskResponse;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.embedded.Swimlane;
@@ -21,7 +24,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -95,6 +100,86 @@ public class TaskServiceImpl implements TaskService {
                 .taskId(taskId)
                 .singleResult();
         return toResponse(claimedTask);
+    }
+
+    @Override
+    public ProcedureResponse complete(String taskId, CompleteTaskRequest request, String username) {
+        Task task = camundaTaskService.createTaskQuery()
+                .taskId(taskId)
+                .active()
+                .singleResult();
+
+        if (task == null) {
+            throw new IllegalArgumentException("Tarea no encontrada o no activa: " + taskId);
+        }
+
+        if (task.getAssignee() == null || task.getAssignee().isBlank()) {
+            throw new IllegalStateException("La tarea debe ser tomada antes de ejecutarla.");
+        }
+
+        if (!username.equals(task.getAssignee())) {
+            throw new IllegalStateException("La tarea esta asignada a otro usuario: " + task.getAssignee());
+        }
+
+        Procedure procedure = resolveProcedure(task);
+        Map<String, Object> mergedFormData = new HashMap<>();
+        if (procedure.getFormData() != null) {
+            mergedFormData.putAll(procedure.getFormData());
+        }
+        if (request.formData() != null) {
+            mergedFormData.putAll(request.formData());
+        }
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.putAll(mergedFormData);
+        variables.put("procedureId", procedure.getId());
+        variables.put("procedureCode", procedure.getCode());
+        variables.put("lastAction", request.action().name());
+        variables.put("lastComment", request.comment());
+        variables.put("lastCompletedBy", username);
+
+        camundaTaskService.complete(taskId, variables);
+
+        procedure.setFormData(mergedFormData);
+        procedure.setLastAction(request.action().name());
+        procedure.setLastComment(trimToNull(request.comment()));
+        procedure.setLastCompletedTaskId(task.getId());
+        procedure.setLastCompletedTaskName(task.getName());
+        procedure.setLastCompletedBy(username);
+        procedure.setLastCompletedAt(LocalDateTime.now());
+        procedure.setUpdatedAt(LocalDateTime.now());
+
+        ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(task.getProcessInstanceId())
+                .singleResult();
+
+        if (instance == null || instance.isEnded()) {
+            procedure.setStatus(ProcedureStatus.COMPLETED);
+            procedure.setCompletedAt(LocalDateTime.now());
+            clearCurrentTask(procedure);
+        } else {
+            Task nextTask = camundaTaskService.createTaskQuery()
+                    .processInstanceId(task.getProcessInstanceId())
+                    .active()
+                    .listPage(0, 1)
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+
+            if (nextTask != null) {
+                procedure.setStatus(ProcedureStatus.IN_PROGRESS);
+                procedure.setCurrentTaskId(nextTask.getId());
+                procedure.setCurrentNodeId(nextTask.getTaskDefinitionKey());
+                procedure.setCurrentNodeName(nextTask.getName());
+                procedure.setCurrentAssigneeUsername(nextTask.getAssignee());
+                procedure.setClaimedAt(null);
+            } else {
+                procedure.setStatus(ProcedureStatus.IN_PROGRESS);
+                clearCurrentTask(procedure);
+            }
+        }
+
+        return toProcedureResponse(procedureRepository.save(procedure));
     }
 
     private boolean canClaim(Task task, Staff staff) {
@@ -202,6 +287,53 @@ public class TaskServiceImpl implements TaskService {
                         ZoneId.systemDefault()
                 )
         );
+    }
+
+    private ProcedureResponse toProcedureResponse(Procedure p) {
+        return new ProcedureResponse(
+                p.getId(),
+                p.getCode(),
+                p.getWorkflowDefinitionId(),
+                p.getWorkflowCode(),
+                p.getWorkflowName(),
+                p.getWorkflowVersion(),
+                p.getCamundaProcessKey(),
+                p.getCamundaProcessInstanceId(),
+                p.getApplicantId(),
+                p.getApplicantDocumentNumber(),
+                p.getApplicantName(),
+                p.getStatus(),
+                p.getCurrentTaskId(),
+                p.getCurrentNodeId(),
+                p.getCurrentNodeName(),
+                p.getCurrentAssigneeUsername(),
+                p.getClaimedAt(),
+                p.getFormData(),
+                p.getLastAction(),
+                p.getLastComment(),
+                p.getLastCompletedTaskId(),
+                p.getLastCompletedTaskName(),
+                p.getLastCompletedBy(),
+                p.getLastCompletedAt(),
+                p.getStartedBy(),
+                p.getStartedAt(),
+                p.getCompletedAt(),
+                p.getCreatedAt(),
+                p.getUpdatedAt()
+        );
+    }
+
+    private void clearCurrentTask(Procedure procedure) {
+        procedure.setCurrentTaskId(null);
+        procedure.setCurrentNodeId(null);
+        procedure.setCurrentNodeName(null);
+        procedure.setCurrentAssigneeUsername(null);
+        procedure.setClaimedAt(null);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim();
     }
 
     private record ResponsibleDepartment(String departmentId, String departmentCode) {}
