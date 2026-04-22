@@ -251,41 +251,66 @@ public class WorkflowServiceImpl implements WorkflowService {
     private String generateBpmnXml(WorkflowDefinition wf) {
         StringBuilder sb = new StringBuilder();
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        sb.append("<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" ");
-        sb.append("xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" ");
-        sb.append("xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\" ");
-        sb.append("xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" ");
-        sb.append("id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n");
-        sb.append("  <bpmn:process id=\"").append(wf.getCamundaProcessKey()).append("\" ");
-        sb.append("name=\"").append(wf.getName()).append("\" isExecutable=\"true\">\n");
+        sb.append("<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n");
+        sb.append("             xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
+        sb.append("             xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\"\n");
+        sb.append("             targetNamespace=\"http://camunda.org/schema/1.0/bpmn\">\n");
+        sb.append("  <process id=\"").append(wf.getCamundaProcessKey()).append("\"");
+        sb.append(" name=\"").append(escapeXml(wf.getName())).append("\"");
+        sb.append(" isExecutable=\"true\"");
+        sb.append(" camunda:historyTimeToLive=\"P180D\">\n");
 
         for (WorkflowNode node : wf.getNodes()) {
+            String id = node.getId();
+            String name = escapeXml(node.getName());
             switch (node.getType()) {
-                case START_EVENT -> sb.append("    <bpmn:startEvent id=\"").append(node.getId()).append("\" name=\"").append(node.getName()).append("\"/>\n");
-                case END_EVENT -> sb.append("    <bpmn:endEvent id=\"").append(node.getId()).append("\" name=\"").append(node.getName()).append("\"/>\n");
-                case USER_TASK -> sb.append("    <bpmn:userTask id=\"").append(node.getId()).append("\" name=\"").append(node.getName()).append("\" camunda:candidateGroups=\"").append(node.getDepartmentId() != null ? node.getDepartmentId() : "").append("\"/>\n");
-                case EXCLUSIVE_GATEWAY -> sb.append("    <bpmn:exclusiveGateway id=\"").append(node.getId()).append("\" name=\"").append(node.getName()).append("\"/>\n");
-                case PARALLEL_GATEWAY -> sb.append("    <bpmn:parallelGateway id=\"").append(node.getId()).append("\" name=\"").append(node.getName()).append("\"/>\n");
-                default -> sb.append("    <bpmn:task id=\"").append(node.getId()).append("\" name=\"").append(node.getName()).append("\"/>\n");
+                case START_EVENT ->
+                    sb.append("    <startEvent id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                case END_EVENT ->
+                    sb.append("    <endEvent id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                case USER_TASK -> {
+                    sb.append("    <userTask id=\"").append(id).append("\" name=\"").append(name).append("\"");
+                    if (node.getDepartmentId() != null && !node.getDepartmentId().isBlank()) {
+                        sb.append(" camunda:candidateGroups=\"").append(node.getDepartmentId()).append("\"");
+                    }
+                    sb.append("/>\n");
+                }
+                case EXCLUSIVE_GATEWAY ->
+                    sb.append("    <exclusiveGateway id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                case PARALLEL_GATEWAY ->
+                    sb.append("    <parallelGateway id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                case INCLUSIVE_GATEWAY ->
+                    sb.append("    <inclusiveGateway id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                default ->
+                    sb.append("    <task id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
             }
         }
 
         for (WorkflowTransition t : wf.getTransitions()) {
-            sb.append("    <bpmn:sequenceFlow id=\"").append(t.getId())
-                    .append("\" sourceRef=\"").append(t.getSourceNodeId())
-                    .append("\" targetRef=\"").append(t.getTargetNodeId()).append("\"");
+            sb.append("    <sequenceFlow id=\"").append(t.getId())
+              .append("\" sourceRef=\"").append(t.getSourceNodeId())
+              .append("\" targetRef=\"").append(t.getTargetNodeId()).append("\"");
             if (t.getCondition() != null && !t.getCondition().isBlank()) {
-                sb.append(">\n      <bpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\">")
-                        .append(t.getCondition())
-                        .append("</bpmn:conditionExpression>\n    </bpmn:sequenceFlow>\n");
+                sb.append(">\n      <conditionExpression xsi:type=\"tFormalExpression\">")
+                  .append(escapeXml(t.getCondition()))
+                  .append("</conditionExpression>\n    </sequenceFlow>\n");
             } else {
                 sb.append("/>\n");
             }
         }
 
-        sb.append("  </bpmn:process>\n");
-        sb.append("</bpmn:definitions>\n");
+        sb.append("  </process>\n");
+        sb.append("</definitions>\n");
         return sb.toString();
+    }
+
+    private String escapeXml(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\"", "&quot;")
+                    .replace("'", "&apos;");
     }
 
     private Swimlane mapSwimlane(CreateWorkflowRequest.SwimlaneRequest s) {

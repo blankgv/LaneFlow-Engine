@@ -41,6 +41,8 @@ public class SecurityConfig {
                                 antMatcher("/docs.html"),
                                 antMatcher("/api-docs/**"),
                                 antMatcher("/swagger-ui/**"),
+                                antMatcher("/camunda/**"),
+                                antMatcher("/engine-rest/**"),
                                 antMatcher("/error")
                         ).permitAll()
                         .anyRequest().authenticated()

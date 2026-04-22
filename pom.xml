@@ -91,6 +91,13 @@
             <version>7.21.0</version>
         </dependency>
 
+        <!-- Camunda Web Apps (Cockpit, Tasklist, Admin) -->
+        <dependency>
+            <groupId>org.camunda.bpm.springboot</groupId>
+            <artifactId>camunda-bpm-spring-boot-starter-webapp</artifactId>
+            <version>7.21.0</version>
+        </dependency>
+
         <!-- Spring Data JPA (requerido por Camunda) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
