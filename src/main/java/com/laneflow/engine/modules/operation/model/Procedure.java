@@ -41,8 +41,11 @@ public class Procedure {
     private String applicantName;
 
     private ProcedureStatus status;
+    private String currentTaskId;
     private String currentNodeId;
     private String currentNodeName;
+    private String currentAssigneeUsername;
+    private LocalDateTime claimedAt;
     private Map<String, Object> formData;
     private String startedBy;
     private LocalDateTime startedAt;

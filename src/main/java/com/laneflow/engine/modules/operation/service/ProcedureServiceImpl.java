@@ -13,7 +13,6 @@ import com.laneflow.engine.modules.workflow.model.enums.WorkflowStatus;
 import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.RuntimeService;
-import org.camunda.bpm.engine.TaskService;
 import org.camunda.bpm.engine.runtime.ProcessInstance;
 import org.camunda.bpm.engine.task.Task;
 import org.springframework.stereotype.Service;
@@ -35,7 +34,7 @@ public class ProcedureServiceImpl implements ProcedureService {
     private final ApplicantRepository applicantRepository;
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
     private final RuntimeService runtimeService;
-    private final TaskService taskService;
+    private final org.camunda.bpm.engine.TaskService taskService;
 
     @Override
     public ProcedureResponse start(StartProcedureRequest request, String startedBy) {
@@ -93,6 +92,7 @@ public class ProcedureServiceImpl implements ProcedureService {
             procedure.setCamundaProcessInstanceId(instance.getId());
             procedure.setStatus(ProcedureStatus.IN_PROGRESS);
             if (activeTask != null) {
+                procedure.setCurrentTaskId(activeTask.getId());
                 procedure.setCurrentNodeId(activeTask.getTaskDefinitionKey());
                 procedure.setCurrentNodeName(activeTask.getName());
             }
@@ -166,8 +166,11 @@ public class ProcedureServiceImpl implements ProcedureService {
                 p.getApplicantDocumentNumber(),
                 p.getApplicantName(),
                 p.getStatus(),
+                p.getCurrentTaskId(),
                 p.getCurrentNodeId(),
                 p.getCurrentNodeName(),
+                p.getCurrentAssigneeUsername(),
+                p.getClaimedAt(),
                 p.getFormData(),
                 p.getStartedBy(),
                 p.getStartedAt(),
