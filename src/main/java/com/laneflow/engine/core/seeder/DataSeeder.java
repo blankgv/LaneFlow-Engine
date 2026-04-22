@@ -9,6 +9,10 @@ import com.laneflow.engine.modules.admin.repository.RoleRepository;
 import com.laneflow.engine.modules.admin.repository.StaffRepository;
 import com.laneflow.engine.modules.admin.model.User;
 import com.laneflow.engine.modules.admin.repository.UserRepository;
+import com.laneflow.engine.modules.operation.model.Applicant;
+import com.laneflow.engine.modules.operation.model.enums.ApplicantType;
+import com.laneflow.engine.modules.operation.model.enums.DocumentType;
+import com.laneflow.engine.modules.operation.repository.ApplicantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -29,6 +33,7 @@ public class DataSeeder implements ApplicationRunner {
     private final StaffRepository staffRepository;
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
+    private final ApplicantRepository applicantRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -37,6 +42,7 @@ public class DataSeeder implements ApplicationRunner {
         seedStaff();
         seedRoles();
         seedUsers();
+        seedApplicants();
     }
 
     private void seedDepartments() {
@@ -126,6 +132,25 @@ public class DataSeeder implements ApplicationRunner {
         log.info("Seed: 8 usuarios creados (password: passw0rd).");
     }
 
+    private void seedApplicants() {
+        if (applicantRepository.count() > 0) {
+            log.info("Solicitantes ya existen, omitiendo seed.");
+            return;
+        }
+
+        applicantRepository.saveAll(List.of(
+                naturalApplicant("CI", "1001001", "Juan", "Perez", "juan.perez@example.com", "70010001"),
+                naturalApplicant("CI", "1001002", "Ana", "Rojas", "ana.rojas@example.com", "70010002"),
+                naturalApplicant("PASSPORT", "P-1001003", "Luis", "Fernandez", "luis.fernandez@example.com", "70010003"),
+                legalApplicant("NIT", "2002002001", "Constructora Andina SRL", "Marta Salinas",
+                        "contacto@andina.example.com", "71020001"),
+                legalApplicant("NIT", "2002002002", "Servicios Delta SA", "Roberto Vargas",
+                        "contacto@delta.example.com", "71020002")
+        ));
+
+        log.info("Seed: 5 solicitantes insertados.");
+    }
+
     private Department dept(String code, String name, String parentId) {
         return Department.builder().code(code).name(name).parentId(parentId).build();
     }
@@ -148,6 +173,34 @@ public class DataSeeder implements ApplicationRunner {
                 .email(email)
                 .staffId(staffId)
                 .roleId(roleId)
+                .build();
+    }
+
+    private Applicant naturalApplicant(String documentType, String documentNumber, String firstName,
+                                       String lastName, String email, String phone) {
+        return Applicant.builder()
+                .type(ApplicantType.NATURAL_PERSON)
+                .documentType(DocumentType.valueOf(documentType))
+                .documentNumber(documentNumber)
+                .firstName(firstName)
+                .lastName(lastName)
+                .email(email)
+                .phone(phone)
+                .address("Sin direccion registrada")
+                .build();
+    }
+
+    private Applicant legalApplicant(String documentType, String documentNumber, String businessName,
+                                     String legalRepresentative, String email, String phone) {
+        return Applicant.builder()
+                .type(ApplicantType.LEGAL_ENTITY)
+                .documentType(DocumentType.valueOf(documentType))
+                .documentNumber(documentNumber)
+                .businessName(businessName)
+                .legalRepresentative(legalRepresentative)
+                .email(email)
+                .phone(phone)
+                .address("Sin direccion registrada")
                 .build();
     }
 }
