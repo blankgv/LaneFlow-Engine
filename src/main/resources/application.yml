@@ -46,6 +46,11 @@ app:
   reset-token:
     expiration-minutes: 60
 
+gcp:
+  storage:
+    bucket: ${GCP_STORAGE_BUCKET}
+    evidence-prefix: ${GCP_STORAGE_EVIDENCE_PREFIX:evidences}
+
 springdoc:
   swagger-ui:
     path: /docs
