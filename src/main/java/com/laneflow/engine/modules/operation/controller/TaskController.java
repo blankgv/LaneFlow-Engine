@@ -4,6 +4,7 @@ import com.laneflow.engine.core.common.ApiVersion;
 import com.laneflow.engine.core.common.Permission;
 import com.laneflow.engine.modules.operation.request.ApproveTaskRequest;
 import com.laneflow.engine.modules.operation.request.CompleteTaskRequest;
+import com.laneflow.engine.modules.operation.request.ObserveTaskRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.operation.response.TaskResponse;
 import com.laneflow.engine.modules.operation.service.TaskService;
@@ -53,6 +54,13 @@ public class TaskController {
     public ResponseEntity<ProcedureResponse> approve(@PathVariable String taskId,
                                                       @Valid @RequestBody ApproveTaskRequest request) {
         return ResponseEntity.ok(service.approve(taskId, request, currentUsername()));
+    }
+
+    @PostMapping("/{taskId}/observe")
+    @PreAuthorize("hasAuthority('" + Permission.TRAMITE_WRITE + "')")
+    public ResponseEntity<ProcedureResponse> observe(@PathVariable String taskId,
+                                                      @Valid @RequestBody ObserveTaskRequest request) {
+        return ResponseEntity.ok(service.observe(taskId, request, currentUsername()));
     }
 
     private String currentUsername() {
