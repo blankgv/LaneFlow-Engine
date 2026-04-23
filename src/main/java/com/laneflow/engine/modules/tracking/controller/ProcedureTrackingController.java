@@ -3,7 +3,9 @@ package com.laneflow.engine.modules.tracking.controller;
 import com.laneflow.engine.core.common.ApiVersion;
 import com.laneflow.engine.core.common.Permission;
 import com.laneflow.engine.modules.tracking.response.ProcedureHistoryResponse;
+import com.laneflow.engine.modules.tracking.response.ProcedureStatusResponse;
 import com.laneflow.engine.modules.tracking.service.ProcedureAuditService;
+import com.laneflow.engine.modules.tracking.service.ProcedureTrackingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +20,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProcedureTrackingController {
 
     private final ProcedureAuditService procedureAuditService;
+    private final ProcedureTrackingService procedureTrackingService;
+
+    @GetMapping("/{procedureId}/status")
+    @PreAuthorize("hasAuthority('" + Permission.TRAMITE_READ + "')")
+    public ResponseEntity<ProcedureStatusResponse> getStatus(@PathVariable String procedureId) {
+        return ResponseEntity.ok(procedureTrackingService.getStatus(procedureId));
+    }
 
     @GetMapping("/{procedureId}/history")
     @PreAuthorize("hasAuthority('" + Permission.TRAMITE_READ + "')")
