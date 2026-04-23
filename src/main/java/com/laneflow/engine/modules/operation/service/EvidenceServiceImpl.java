@@ -8,6 +8,8 @@ import com.laneflow.engine.modules.operation.model.enums.EvidenceCategory;
 import com.laneflow.engine.modules.operation.repository.EvidenceRepository;
 import com.laneflow.engine.modules.operation.repository.ProcedureRepository;
 import com.laneflow.engine.modules.operation.response.EvidenceResponse;
+import com.laneflow.engine.modules.tracking.model.enums.ProcedureAuditAction;
+import com.laneflow.engine.modules.tracking.service.ProcedureAuditService;
 import com.laneflow.engine.modules.workflow.model.DynamicForm;
 import com.laneflow.engine.modules.workflow.model.FormField;
 import com.laneflow.engine.modules.workflow.model.embedded.FileConfig;
@@ -43,6 +45,7 @@ public class EvidenceServiceImpl implements EvidenceService {
     private final DynamicFormRepository dynamicFormRepository;
     private final FormFieldRepository formFieldRepository;
     private final StorageService storageService;
+    private final ProcedureAuditService procedureAuditService;
 
     @Value("${gcp.storage.evidence-prefix:evidences}")
     private String evidencePrefix;
@@ -98,6 +101,24 @@ public class EvidenceServiceImpl implements EvidenceService {
                 .category(category != null ? category : EvidenceCategory.GENERAL)
                 .build());
 
+        procedureAuditService.record(
+                procedure,
+                ProcedureAuditAction.EVIDENCE_UPLOADED,
+                "Evidencia cargada al almacenamiento.",
+                uploadedBy,
+                trimToNull(taskId),
+                nodeId,
+                null,
+                procedure.getStatus(),
+                procedure.getStatus(),
+                java.util.Map.of(
+                        "evidenceId", saved.getId(),
+                        "fieldName", saved.getFieldName(),
+                        "fileName", saved.getOriginalFileName(),
+                        "storagePath", saved.getStoragePath()
+                )
+        );
+
         return toResponse(saved);
     }
 
@@ -124,9 +145,28 @@ public class EvidenceServiceImpl implements EvidenceService {
     public void delete(String id) {
         Evidence evidence = evidenceRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Evidencia no encontrada: " + id));
+        Procedure procedure = procedureRepository.findById(evidence.getProcedureId())
+                .orElseThrow(() -> new IllegalArgumentException("Tramite no encontrado: " + evidence.getProcedureId()));
 
         storageService.delete(evidence.getStoragePath());
         evidenceRepository.delete(evidence);
+        procedureAuditService.record(
+                procedure,
+                ProcedureAuditAction.EVIDENCE_DELETED,
+                "Evidencia eliminada del almacenamiento.",
+                evidence.getUploadedBy(),
+                evidence.getTaskId(),
+                evidence.getNodeId(),
+                null,
+                procedure.getStatus(),
+                procedure.getStatus(),
+                java.util.Map.of(
+                        "evidenceId", evidence.getId(),
+                        "fieldName", evidence.getFieldName(),
+                        "fileName", evidence.getOriginalFileName(),
+                        "storagePath", evidence.getStoragePath()
+                )
+        );
     }
 
     private FieldContext resolveFieldContext(Procedure procedure, String nodeId, String fieldName) {

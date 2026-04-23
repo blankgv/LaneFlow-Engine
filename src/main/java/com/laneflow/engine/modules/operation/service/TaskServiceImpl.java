@@ -16,6 +16,8 @@ import com.laneflow.engine.modules.operation.request.ObserveTaskRequest;
 import com.laneflow.engine.modules.operation.request.RejectTaskRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.operation.response.TaskResponse;
+import com.laneflow.engine.modules.tracking.model.enums.ProcedureAuditAction;
+import com.laneflow.engine.modules.tracking.service.ProcedureAuditService;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.embedded.Swimlane;
 import com.laneflow.engine.modules.workflow.model.embedded.WorkflowNode;
@@ -44,6 +46,7 @@ public class TaskServiceImpl implements TaskService {
     private final UserRepository userRepository;
     private final StaffRepository staffRepository;
     private final DepartmentRepository departmentRepository;
+    private final ProcedureAuditService procedureAuditService;
 
     @Override
     public List<TaskResponse> getAvailable(String username) {
@@ -92,13 +95,26 @@ public class TaskServiceImpl implements TaskService {
         camundaTaskService.claim(taskId, username);
 
         Procedure procedure = resolveProcedure(task);
+        ProcedureStatus statusBefore = procedure.getStatus();
         procedure.setCurrentTaskId(task.getId());
         procedure.setCurrentNodeId(task.getTaskDefinitionKey());
         procedure.setCurrentNodeName(task.getName());
         procedure.setCurrentAssigneeUsername(username);
         procedure.setClaimedAt(LocalDateTime.now());
         procedure.setUpdatedAt(LocalDateTime.now());
-        procedureRepository.save(procedure);
+        Procedure saved = procedureRepository.save(procedure);
+        procedureAuditService.record(
+                saved,
+                ProcedureAuditAction.TASK_CLAIMED,
+                "Tarea tomada desde la cola.",
+                username,
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                task.getName(),
+                statusBefore,
+                saved.getStatus(),
+                Map.of("assignee", username)
+        );
 
         Task claimedTask = camundaTaskService.createTaskQuery()
                 .taskId(taskId)
@@ -126,6 +142,7 @@ public class TaskServiceImpl implements TaskService {
         }
 
         Procedure procedure = resolveProcedure(task);
+        ProcedureStatus statusBefore = procedure.getStatus();
         Map<String, Object> mergedFormData = new HashMap<>();
         if (procedure.getFormData() != null) {
             mergedFormData.putAll(procedure.getFormData());
@@ -191,7 +208,23 @@ public class TaskServiceImpl implements TaskService {
             }
         }
 
-        return toProcedureResponse(procedureRepository.save(procedure));
+        Procedure saved = procedureRepository.save(procedure);
+        procedureAuditService.record(
+                saved,
+                resolveAuditAction(request.action()),
+                resolveAuditDescription(request.action()),
+                username,
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                task.getName(),
+                statusBefore,
+                saved.getStatus(),
+                Map.of(
+                        "comment", request.comment() == null ? "" : request.comment(),
+                        "lastAction", request.action().name()
+                )
+        );
+        return toProcedureResponse(saved);
     }
 
     @Override
@@ -329,6 +362,26 @@ public class TaskServiceImpl implements TaskService {
                         ZoneId.systemDefault()
                 )
         );
+    }
+
+    private ProcedureAuditAction resolveAuditAction(TaskAction action) {
+        return switch (action) {
+            case COMPLETE -> ProcedureAuditAction.TASK_COMPLETED;
+            case APPROVE -> ProcedureAuditAction.TASK_APPROVED;
+            case OBSERVE -> ProcedureAuditAction.TASK_OBSERVED;
+            case REJECT -> ProcedureAuditAction.TASK_REJECTED;
+            default -> ProcedureAuditAction.TASK_COMPLETED;
+        };
+    }
+
+    private String resolveAuditDescription(TaskAction action) {
+        return switch (action) {
+            case COMPLETE -> "Tarea completada.";
+            case APPROVE -> "Tarea aprobada.";
+            case OBSERVE -> "Tarea observada.";
+            case REJECT -> "Tarea rechazada.";
+            default -> "Tarea ejecutada.";
+        };
     }
 
     private ProcedureResponse toProcedureResponse(Procedure p) {

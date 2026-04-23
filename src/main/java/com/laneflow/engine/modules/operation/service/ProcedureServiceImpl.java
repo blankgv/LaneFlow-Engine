@@ -10,6 +10,8 @@ import com.laneflow.engine.modules.operation.repository.ProcedureRepository;
 import com.laneflow.engine.modules.operation.request.ResolveObservationRequest;
 import com.laneflow.engine.modules.operation.request.StartProcedureRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
+import com.laneflow.engine.modules.tracking.model.enums.ProcedureAuditAction;
+import com.laneflow.engine.modules.tracking.service.ProcedureAuditService;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowStatus;
 import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
@@ -37,6 +39,7 @@ public class ProcedureServiceImpl implements ProcedureService {
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
     private final RuntimeService runtimeService;
     private final org.camunda.bpm.engine.TaskService taskService;
+    private final ProcedureAuditService procedureAuditService;
 
     @Override
     public ProcedureResponse start(StartProcedureRequest request, String startedBy) {
@@ -59,6 +62,7 @@ public class ProcedureServiceImpl implements ProcedureService {
         }
 
         LocalDateTime now = LocalDateTime.now();
+        ProcedureStatus statusBefore = ProcedureStatus.STARTED;
         Procedure procedure = procedureRepository.save(Procedure.builder()
                 .code(generateCode())
                 .workflowDefinitionId(workflow.getId())
@@ -99,8 +103,24 @@ public class ProcedureServiceImpl implements ProcedureService {
                 procedure.setCurrentNodeName(activeTask.getName());
             }
             procedure.setUpdatedAt(LocalDateTime.now());
-
-            return toResponse(procedureRepository.save(procedure));
+            Procedure saved = procedureRepository.save(procedure);
+            procedureAuditService.record(
+                    saved,
+                    ProcedureAuditAction.PROCEDURE_STARTED,
+                    "Tramite iniciado y enviado a Camunda.",
+                    startedBy,
+                    saved.getCurrentTaskId(),
+                    saved.getCurrentNodeId(),
+                    saved.getCurrentNodeName(),
+                    statusBefore,
+                    saved.getStatus(),
+                    Map.of(
+                            "workflowDefinitionId", saved.getWorkflowDefinitionId(),
+                            "applicantId", saved.getApplicantId(),
+                            "camundaProcessInstanceId", saved.getCamundaProcessInstanceId()
+                    )
+            );
+            return toResponse(saved);
         } catch (Exception e) {
             procedureRepository.delete(procedure);
             throw new IllegalStateException("Error al iniciar el tramite en Camunda: " + e.getMessage(), e);
@@ -111,6 +131,7 @@ public class ProcedureServiceImpl implements ProcedureService {
     public ProcedureResponse resolveObservation(String id, ResolveObservationRequest request, String resolvedBy) {
         Procedure procedure = procedureRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Tramite no encontrado: " + id));
+        ProcedureStatus statusBefore = procedure.getStatus();
 
         if (procedure.getStatus() != ProcedureStatus.OBSERVED) {
             throw new IllegalStateException("Solo se pueden subsanar tramites en estado OBSERVED.");
@@ -184,7 +205,24 @@ public class ProcedureServiceImpl implements ProcedureService {
             }
 
             procedure.setUpdatedAt(LocalDateTime.now());
-            return toResponse(procedureRepository.save(procedure));
+            Procedure saved = procedureRepository.save(procedure);
+            procedureAuditService.record(
+                    saved,
+                    ProcedureAuditAction.OBSERVATION_RESOLVED,
+                    "Observacion subsanada y tramite reiniciado en Camunda.",
+                    resolvedBy,
+                    saved.getCurrentTaskId(),
+                    saved.getCurrentNodeId(),
+                    saved.getCurrentNodeName(),
+                    statusBefore,
+                    saved.getStatus(),
+                    Map.of(
+                            "previousCamundaProcessInstanceId", previousInstanceId == null ? "" : previousInstanceId,
+                            "camundaProcessInstanceId", saved.getCamundaProcessInstanceId(),
+                            "resubmissionCount", saved.getResubmissionCount()
+                    )
+            );
+            return toResponse(saved);
         } catch (Exception e) {
             procedure.setCamundaProcessInstanceId(previousInstanceId);
             procedure.setStatus(ProcedureStatus.OBSERVED);
