@@ -13,6 +13,7 @@ import com.laneflow.engine.modules.operation.repository.ProcedureRepository;
 import com.laneflow.engine.modules.operation.request.ApproveTaskRequest;
 import com.laneflow.engine.modules.operation.request.CompleteTaskRequest;
 import com.laneflow.engine.modules.operation.request.ObserveTaskRequest;
+import com.laneflow.engine.modules.operation.request.RejectTaskRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.operation.response.TaskResponse;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
@@ -160,6 +161,10 @@ public class TaskServiceImpl implements TaskService {
             procedure.setStatus(ProcedureStatus.OBSERVED);
             procedure.setCompletedAt(null);
             clearCurrentTask(procedure);
+        } else if (request.action() == TaskAction.REJECT) {
+            procedure.setStatus(ProcedureStatus.REJECTED);
+            procedure.setCompletedAt(null);
+            clearCurrentTask(procedure);
         } else if (instance == null || instance.isEnded()) {
             procedure.setStatus(ProcedureStatus.COMPLETED);
             procedure.setCompletedAt(LocalDateTime.now());
@@ -203,6 +208,16 @@ public class TaskServiceImpl implements TaskService {
     public ProcedureResponse observe(String taskId, ObserveTaskRequest request, String username) {
         CompleteTaskRequest completeRequest = new CompleteTaskRequest(
                 TaskAction.OBSERVE,
+                request.comment(),
+                request.formData()
+        );
+        return complete(taskId, completeRequest, username);
+    }
+
+    @Override
+    public ProcedureResponse reject(String taskId, RejectTaskRequest request, String username) {
+        CompleteTaskRequest completeRequest = new CompleteTaskRequest(
+                TaskAction.REJECT,
                 request.comment(),
                 request.formData()
         );
