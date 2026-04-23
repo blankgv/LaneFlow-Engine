@@ -18,25 +18,33 @@ public class EmailServiceImpl implements EmailService {
     private String from;
 
     @Override
-    public void sendPasswordResetEmail(String to, String resetLink) {
+    public void sendEmail(String to, String subject, String text) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(to);
-        message.setSubject("LaneFlow — Recuperación de contraseña");
-        message.setText("""
+        message.setSubject(subject);
+        message.setText(text);
+        mailSender.send(message);
+    }
+
+    @Override
+    public void sendPasswordResetEmail(String to, String resetLink) {
+        sendEmail(
+                to,
+                "LaneFlow - Recuperacion de contrasena",
+                """
                 Hola,
 
-                Recibimos una solicitud para restablecer la contraseña de tu cuenta.
-                Haz clic en el siguiente enlace (válido por 60 minutos):
+                Recibimos una solicitud para restablecer la contrasena de tu cuenta.
+                Haz clic en el siguiente enlace (valido por 60 minutos):
 
                 %s
 
                 Si no solicitaste este cambio, ignora este mensaje.
 
-                — Equipo LaneFlow
-                """.formatted(resetLink));
-
-        mailSender.send(message);
-        log.info("Email de recuperación enviado a: {}", to);
+                - Equipo LaneFlow
+                """.formatted(resetLink)
+        );
+        log.info("Email de recuperacion enviado a: {}", to);
     }
 }

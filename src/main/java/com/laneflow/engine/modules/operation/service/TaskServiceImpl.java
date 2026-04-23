@@ -17,7 +17,9 @@ import com.laneflow.engine.modules.operation.request.RejectTaskRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.operation.response.TaskResponse;
 import com.laneflow.engine.modules.tracking.model.enums.ProcedureAuditAction;
+import com.laneflow.engine.modules.tracking.model.enums.NotificationType;
 import com.laneflow.engine.modules.tracking.service.ProcedureAuditService;
+import com.laneflow.engine.modules.tracking.service.ProcedureNotificationService;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.embedded.Swimlane;
 import com.laneflow.engine.modules.workflow.model.embedded.WorkflowNode;
@@ -47,6 +49,7 @@ public class TaskServiceImpl implements TaskService {
     private final StaffRepository staffRepository;
     private final DepartmentRepository departmentRepository;
     private final ProcedureAuditService procedureAuditService;
+    private final ProcedureNotificationService procedureNotificationService;
 
     @Override
     public List<TaskResponse> getAvailable(String username) {
@@ -225,6 +228,7 @@ public class TaskServiceImpl implements TaskService {
                         "lastAction", request.action().name()
                 )
         );
+        notifyApplicantIfNeeded(saved, request.action());
         return toProcedureResponse(saved);
     }
 
@@ -436,6 +440,16 @@ public class TaskServiceImpl implements TaskService {
     private String trimToNull(String value) {
         if (value == null || value.isBlank()) return null;
         return value.trim();
+    }
+
+    private void notifyApplicantIfNeeded(Procedure procedure, TaskAction action) {
+        switch (action) {
+            case APPROVE -> procedureNotificationService.notifyApplicant(procedure, NotificationType.PROCEDURE_APPROVED);
+            case OBSERVE -> procedureNotificationService.notifyApplicant(procedure, NotificationType.PROCEDURE_OBSERVED);
+            case REJECT -> procedureNotificationService.notifyApplicant(procedure, NotificationType.PROCEDURE_REJECTED);
+            default -> {
+            }
+        }
     }
 
     private record ResponsibleDepartment(String departmentId, String departmentCode) {}

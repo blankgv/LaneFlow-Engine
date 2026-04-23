@@ -11,7 +11,9 @@ import com.laneflow.engine.modules.operation.request.ResolveObservationRequest;
 import com.laneflow.engine.modules.operation.request.StartProcedureRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.tracking.model.enums.ProcedureAuditAction;
+import com.laneflow.engine.modules.tracking.model.enums.NotificationType;
 import com.laneflow.engine.modules.tracking.service.ProcedureAuditService;
+import com.laneflow.engine.modules.tracking.service.ProcedureNotificationService;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowStatus;
 import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
@@ -40,6 +42,7 @@ public class ProcedureServiceImpl implements ProcedureService {
     private final RuntimeService runtimeService;
     private final org.camunda.bpm.engine.TaskService taskService;
     private final ProcedureAuditService procedureAuditService;
+    private final ProcedureNotificationService procedureNotificationService;
 
     @Override
     public ProcedureResponse start(StartProcedureRequest request, String startedBy) {
@@ -120,6 +123,7 @@ public class ProcedureServiceImpl implements ProcedureService {
                             "camundaProcessInstanceId", saved.getCamundaProcessInstanceId()
                     )
             );
+            procedureNotificationService.notifyApplicant(saved, NotificationType.PROCEDURE_STARTED);
             return toResponse(saved);
         } catch (Exception e) {
             procedureRepository.delete(procedure);
@@ -240,6 +244,7 @@ public class ProcedureServiceImpl implements ProcedureService {
                             "resubmissionCount", saved.getResubmissionCount()
                     )
             );
+            procedureNotificationService.notifyApplicant(saved, NotificationType.OBSERVATION_RESOLVED);
             return toResponse(saved);
         } catch (Exception e) {
             procedure.setCamundaProcessInstanceId(originalCamundaProcessInstanceId);
