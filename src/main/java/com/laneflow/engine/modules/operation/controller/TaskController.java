@@ -2,6 +2,7 @@ package com.laneflow.engine.modules.operation.controller;
 
 import com.laneflow.engine.core.common.ApiVersion;
 import com.laneflow.engine.core.common.Permission;
+import com.laneflow.engine.modules.operation.request.ApproveTaskRequest;
 import com.laneflow.engine.modules.operation.request.CompleteTaskRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.operation.response.TaskResponse;
@@ -45,6 +46,13 @@ public class TaskController {
     public ResponseEntity<ProcedureResponse> complete(@PathVariable String taskId,
                                                        @Valid @RequestBody CompleteTaskRequest request) {
         return ResponseEntity.ok(service.complete(taskId, request, currentUsername()));
+    }
+
+    @PostMapping("/{taskId}/approve")
+    @PreAuthorize("hasAuthority('" + Permission.TRAMITE_WRITE + "')")
+    public ResponseEntity<ProcedureResponse> approve(@PathVariable String taskId,
+                                                      @Valid @RequestBody ApproveTaskRequest request) {
+        return ResponseEntity.ok(service.approve(taskId, request, currentUsername()));
     }
 
     private String currentUsername() {

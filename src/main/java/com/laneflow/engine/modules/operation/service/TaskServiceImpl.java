@@ -8,7 +8,9 @@ import com.laneflow.engine.modules.admin.repository.StaffRepository;
 import com.laneflow.engine.modules.admin.repository.UserRepository;
 import com.laneflow.engine.modules.operation.model.Procedure;
 import com.laneflow.engine.modules.operation.model.enums.ProcedureStatus;
+import com.laneflow.engine.modules.operation.model.enums.TaskAction;
 import com.laneflow.engine.modules.operation.repository.ProcedureRepository;
+import com.laneflow.engine.modules.operation.request.ApproveTaskRequest;
 import com.laneflow.engine.modules.operation.request.CompleteTaskRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.operation.response.TaskResponse;
@@ -180,6 +182,16 @@ public class TaskServiceImpl implements TaskService {
         }
 
         return toProcedureResponse(procedureRepository.save(procedure));
+    }
+
+    @Override
+    public ProcedureResponse approve(String taskId, ApproveTaskRequest request, String username) {
+        CompleteTaskRequest completeRequest = new CompleteTaskRequest(
+                TaskAction.APPROVE,
+                request.comment(),
+                request.formData()
+        );
+        return complete(taskId, completeRequest, username);
     }
 
     private boolean canClaim(Task task, Staff staff) {
