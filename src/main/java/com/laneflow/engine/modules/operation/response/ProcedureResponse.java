@@ -28,6 +28,7 @@ public record ProcedureResponse(
         String lastAction,
         String lastComment,
         String lastCompletedTaskId,
+        String lastCompletedNodeId,
         String lastCompletedTaskName,
         String lastCompletedBy,
         LocalDateTime lastCompletedAt,

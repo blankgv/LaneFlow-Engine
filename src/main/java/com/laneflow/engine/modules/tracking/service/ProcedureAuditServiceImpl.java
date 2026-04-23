@@ -81,7 +81,7 @@ public class ProcedureAuditServiceImpl implements ProcedureAuditService {
                 audit.getNodeName(),
                 audit.getStatusBefore(),
                 audit.getStatusAfter(),
-                audit.getMetadata(),
+                sanitizeMetadata(audit),
                 audit.getCreatedAt()
         );
     }
@@ -147,5 +147,40 @@ public class ProcedureAuditServiceImpl implements ProcedureAuditService {
         }
         String text = value.toString().trim();
         return text.isEmpty() ? fallback : text;
+    }
+
+    private Map<String, Object> sanitizeMetadata(ProcedureAudit audit) {
+        Map<String, Object> metadata = audit.getMetadata();
+        if (metadata == null || metadata.isEmpty()) {
+            return Map.of();
+        }
+
+        return switch (audit.getAction()) {
+            case TASK_COMPLETED, TASK_APPROVED, TASK_OBSERVED, TASK_REJECTED -> {
+                String comment = resolveMetadataValue(audit, "comment", "");
+                yield comment.isBlank() ? Map.of() : Map.of("comment", comment);
+            }
+            case OBSERVATION_RESOLVED -> Map.of(
+                    "resubmissionCount", metadata.getOrDefault("resubmissionCount", 0)
+            );
+            case EVIDENCE_UPLOADED, EVIDENCE_DELETED -> {
+                String fileName = resolveMetadataValue(audit, "fileName", "");
+                String fieldName = resolveMetadataValue(audit, "fieldName", "");
+                if (fileName.isBlank() && fieldName.isBlank()) {
+                    yield Map.of();
+                }
+                if (fieldName.isBlank()) {
+                    yield Map.of("fileName", fileName);
+                }
+                if (fileName.isBlank()) {
+                    yield Map.of("fieldName", fieldName);
+                }
+                yield Map.of(
+                        "fileName", fileName,
+                        "fieldName", fieldName
+                );
+            }
+            default -> Map.of();
+        };
     }
 }

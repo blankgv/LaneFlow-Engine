@@ -51,6 +51,7 @@ public class Procedure {
     private String lastAction;
     private String lastComment;
     private String lastCompletedTaskId;
+    private String lastCompletedNodeId;
     private String lastCompletedTaskName;
     private String lastCompletedBy;
     private LocalDateTime lastCompletedAt;

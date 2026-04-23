@@ -132,6 +132,24 @@ public class ProcedureServiceImpl implements ProcedureService {
         Procedure procedure = procedureRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Tramite no encontrado: " + id));
         ProcedureStatus statusBefore = procedure.getStatus();
+        String originalCamundaProcessInstanceId = procedure.getCamundaProcessInstanceId();
+        String originalPreviousCamundaProcessInstanceId = procedure.getPreviousCamundaProcessInstanceId();
+        Map<String, Object> originalFormData = procedure.getFormData() == null
+                ? null
+                : new HashMap<>(procedure.getFormData());
+        String originalLastAction = procedure.getLastAction();
+        String originalLastComment = procedure.getLastComment();
+        int originalResubmissionCount = procedure.getResubmissionCount();
+        String originalResolvedObservationBy = procedure.getResolvedObservationBy();
+        LocalDateTime originalResolvedObservationAt = procedure.getResolvedObservationAt();
+        String originalResolvedObservationComment = procedure.getResolvedObservationComment();
+        LocalDateTime originalCompletedAt = procedure.getCompletedAt();
+        LocalDateTime originalUpdatedAt = procedure.getUpdatedAt();
+        String originalCurrentTaskId = procedure.getCurrentTaskId();
+        String originalCurrentNodeId = procedure.getCurrentNodeId();
+        String originalCurrentNodeName = procedure.getCurrentNodeName();
+        String originalCurrentAssigneeUsername = procedure.getCurrentAssigneeUsername();
+        LocalDateTime originalClaimedAt = procedure.getClaimedAt();
 
         if (procedure.getStatus() != ProcedureStatus.OBSERVED) {
             throw new IllegalStateException("Solo se pueden subsanar tramites en estado OBSERVED.");
@@ -224,8 +242,23 @@ public class ProcedureServiceImpl implements ProcedureService {
             );
             return toResponse(saved);
         } catch (Exception e) {
-            procedure.setCamundaProcessInstanceId(previousInstanceId);
-            procedure.setStatus(ProcedureStatus.OBSERVED);
+            procedure.setCamundaProcessInstanceId(originalCamundaProcessInstanceId);
+            procedure.setPreviousCamundaProcessInstanceId(originalPreviousCamundaProcessInstanceId);
+            procedure.setFormData(originalFormData == null ? null : new HashMap<>(originalFormData));
+            procedure.setLastAction(originalLastAction);
+            procedure.setLastComment(originalLastComment);
+            procedure.setResubmissionCount(originalResubmissionCount);
+            procedure.setResolvedObservationBy(originalResolvedObservationBy);
+            procedure.setResolvedObservationAt(originalResolvedObservationAt);
+            procedure.setResolvedObservationComment(originalResolvedObservationComment);
+            procedure.setCompletedAt(originalCompletedAt);
+            procedure.setUpdatedAt(originalUpdatedAt);
+            procedure.setCurrentTaskId(originalCurrentTaskId);
+            procedure.setCurrentNodeId(originalCurrentNodeId);
+            procedure.setCurrentNodeName(originalCurrentNodeName);
+            procedure.setCurrentAssigneeUsername(originalCurrentAssigneeUsername);
+            procedure.setClaimedAt(originalClaimedAt);
+            procedure.setStatus(statusBefore);
             procedureRepository.save(procedure);
             throw new IllegalStateException("Error al reiniciar el tramite en Camunda: " + e.getMessage(), e);
         }
@@ -302,6 +335,7 @@ public class ProcedureServiceImpl implements ProcedureService {
                 p.getLastAction(),
                 p.getLastComment(),
                 p.getLastCompletedTaskId(),
+                p.getLastCompletedNodeId(),
                 p.getLastCompletedTaskName(),
                 p.getLastCompletedBy(),
                 p.getLastCompletedAt(),

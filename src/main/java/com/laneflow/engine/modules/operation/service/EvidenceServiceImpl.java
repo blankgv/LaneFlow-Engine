@@ -66,11 +66,7 @@ public class EvidenceServiceImpl implements EvidenceService {
         Procedure procedure = procedureRepository.findById(procedureId)
                 .orElseThrow(() -> new IllegalArgumentException("Tramite no encontrado: " + procedureId));
 
-        if (taskId != null && !taskId.isBlank()
-                && procedure.getCurrentTaskId() != null
-                && !procedure.getCurrentTaskId().equals(taskId)) {
-            throw new IllegalArgumentException("La tarea no corresponde al tramite actual.");
-        }
+        validateEvidenceContext(procedure, taskId, nodeId);
 
         FieldContext fieldContext = resolveFieldContext(procedure, nodeId, fieldName);
         validateFileConfig(file, fieldContext.field());
@@ -194,6 +190,30 @@ public class EvidenceServiceImpl implements EvidenceService {
         }
 
         return new FieldContext(form, field);
+    }
+
+    private void validateEvidenceContext(Procedure procedure, String taskId, String nodeId) {
+        if (procedure.getCurrentTaskId() != null && !procedure.getCurrentTaskId().isBlank()) {
+            if (taskId == null || taskId.isBlank()) {
+                throw new IllegalArgumentException("La tarea actual es obligatoria para adjuntar evidencia en un tramite activo.");
+            }
+            if (!procedure.getCurrentTaskId().equals(taskId)) {
+                throw new IllegalArgumentException("La tarea no corresponde al tramite actual.");
+            }
+            if (procedure.getCurrentNodeId() == null || !procedure.getCurrentNodeId().equals(nodeId)) {
+                throw new IllegalArgumentException("La evidencia solo se puede adjuntar al nodo activo del tramite.");
+            }
+            return;
+        }
+
+        if (procedure.getStatus() == com.laneflow.engine.modules.operation.model.enums.ProcedureStatus.OBSERVED) {
+            if (procedure.getLastCompletedNodeId() == null || !procedure.getLastCompletedNodeId().equals(nodeId)) {
+                throw new IllegalArgumentException("La evidencia observada solo se puede adjuntar al ultimo nodo revisado.");
+            }
+            return;
+        }
+
+        throw new IllegalArgumentException("No se puede adjuntar evidencia cuando el tramite no tiene una etapa habilitada.");
     }
 
     private void validateFileConfig(MultipartFile file, FormField field) {

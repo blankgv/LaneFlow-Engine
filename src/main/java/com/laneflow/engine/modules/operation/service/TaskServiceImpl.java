@@ -165,6 +165,7 @@ public class TaskServiceImpl implements TaskService {
         procedure.setLastAction(request.action().name());
         procedure.setLastComment(trimToNull(request.comment()));
         procedure.setLastCompletedTaskId(task.getId());
+        procedure.setLastCompletedNodeId(task.getTaskDefinitionKey());
         procedure.setLastCompletedTaskName(task.getName());
         procedure.setLastCompletedBy(username);
         procedure.setLastCompletedAt(LocalDateTime.now());
@@ -408,6 +409,7 @@ public class TaskServiceImpl implements TaskService {
                 p.getLastAction(),
                 p.getLastComment(),
                 p.getLastCompletedTaskId(),
+                p.getLastCompletedNodeId(),
                 p.getLastCompletedTaskName(),
                 p.getLastCompletedBy(),
                 p.getLastCompletedAt(),
