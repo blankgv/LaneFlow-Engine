@@ -3,6 +3,7 @@ package com.laneflow.engine.modules.tracking.service;
 import com.laneflow.engine.modules.operation.model.Procedure;
 import com.laneflow.engine.modules.operation.model.enums.ProcedureStatus;
 import com.laneflow.engine.modules.tracking.model.enums.ProcedureAuditAction;
+import com.laneflow.engine.modules.tracking.response.ProcedureHistoryResponse;
 
 import java.util.Map;
 
@@ -17,4 +18,6 @@ public interface ProcedureAuditService {
                 ProcedureStatus statusBefore,
                 ProcedureStatus statusAfter,
                 Map<String, Object> metadata);
+
+    ProcedureHistoryResponse getHistory(String procedureId);
 }
