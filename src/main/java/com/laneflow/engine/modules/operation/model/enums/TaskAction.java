@@ -4,5 +4,6 @@ public enum TaskAction {
     COMPLETE,
     APPROVE,
     OBSERVE,
-    REJECT
+    REJECT,
+    RESOLVE_OBSERVATION
 }

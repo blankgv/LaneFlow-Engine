@@ -33,6 +33,7 @@ public class Procedure {
     private int workflowVersion;
     private String camundaProcessKey;
     private String camundaProcessInstanceId;
+    private String previousCamundaProcessInstanceId;
 
     @Indexed
     private String applicantId;
@@ -53,6 +54,10 @@ public class Procedure {
     private String lastCompletedTaskName;
     private String lastCompletedBy;
     private LocalDateTime lastCompletedAt;
+    private int resubmissionCount;
+    private String resolvedObservationBy;
+    private LocalDateTime resolvedObservationAt;
+    private String resolvedObservationComment;
     private String startedBy;
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;

@@ -4,8 +4,10 @@ import com.laneflow.engine.modules.operation.model.Applicant;
 import com.laneflow.engine.modules.operation.model.Procedure;
 import com.laneflow.engine.modules.operation.model.enums.ApplicantType;
 import com.laneflow.engine.modules.operation.model.enums.ProcedureStatus;
+import com.laneflow.engine.modules.operation.model.enums.TaskAction;
 import com.laneflow.engine.modules.operation.repository.ApplicantRepository;
 import com.laneflow.engine.modules.operation.repository.ProcedureRepository;
+import com.laneflow.engine.modules.operation.request.ResolveObservationRequest;
 import com.laneflow.engine.modules.operation.request.StartProcedureRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
@@ -106,6 +108,92 @@ public class ProcedureServiceImpl implements ProcedureService {
     }
 
     @Override
+    public ProcedureResponse resolveObservation(String id, ResolveObservationRequest request, String resolvedBy) {
+        Procedure procedure = procedureRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Tramite no encontrado: " + id));
+
+        if (procedure.getStatus() != ProcedureStatus.OBSERVED) {
+            throw new IllegalStateException("Solo se pueden subsanar tramites en estado OBSERVED.");
+        }
+
+        WorkflowDefinition workflow = workflowDefinitionRepository.findById(procedure.getWorkflowDefinitionId())
+                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + procedure.getWorkflowDefinitionId()));
+
+        if (workflow.getStatus() != WorkflowStatus.PUBLISHED) {
+            throw new IllegalStateException("Solo se pueden subsanar tramites con workflows publicados.");
+        }
+
+        if (workflow.getCamundaProcessKey() == null || workflow.getCamundaProcessKey().isBlank()) {
+            throw new IllegalStateException("El workflow no tiene process key de Camunda configurado.");
+        }
+
+        Map<String, Object> mergedFormData = new HashMap<>();
+        if (procedure.getFormData() != null) {
+            mergedFormData.putAll(procedure.getFormData());
+        }
+        if (request.formData() != null) {
+            mergedFormData.putAll(request.formData());
+        }
+
+        String previousInstanceId = procedure.getCamundaProcessInstanceId();
+        procedure.setPreviousCamundaProcessInstanceId(previousInstanceId);
+        procedure.setFormData(mergedFormData);
+        procedure.setLastAction(TaskAction.RESOLVE_OBSERVATION.name());
+        procedure.setLastComment(trimToNull(request.comment()));
+        procedure.setResolvedObservationBy(resolvedBy);
+        procedure.setResolvedObservationAt(LocalDateTime.now());
+        procedure.setResolvedObservationComment(trimToNull(request.comment()));
+        procedure.setResubmissionCount(procedure.getResubmissionCount() + 1);
+        procedure.setCompletedAt(null);
+        procedure.setUpdatedAt(LocalDateTime.now());
+
+        try {
+            Map<String, Object> variables = buildProcessVariables(procedure);
+            variables.put("previousCamundaProcessInstanceId", previousInstanceId);
+            variables.put("resubmissionCount", procedure.getResubmissionCount());
+            variables.put("resolvedObservationBy", resolvedBy);
+            variables.put("resolvedObservationComment", request.comment());
+
+            ProcessInstance instance = runtimeService.startProcessInstanceByKey(
+                    workflow.getCamundaProcessKey(),
+                    procedure.getId(),
+                    variables
+            );
+
+            Task activeTask = taskService.createTaskQuery()
+                    .processInstanceId(instance.getId())
+                    .active()
+                    .listPage(0, 1)
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+
+            procedure.setCamundaProcessInstanceId(instance.getId());
+            procedure.setStatus(ProcedureStatus.IN_PROGRESS);
+            procedure.setCurrentAssigneeUsername(null);
+            procedure.setClaimedAt(null);
+
+            if (activeTask != null) {
+                procedure.setCurrentTaskId(activeTask.getId());
+                procedure.setCurrentNodeId(activeTask.getTaskDefinitionKey());
+                procedure.setCurrentNodeName(activeTask.getName());
+            } else {
+                procedure.setCurrentTaskId(null);
+                procedure.setCurrentNodeId(null);
+                procedure.setCurrentNodeName(null);
+            }
+
+            procedure.setUpdatedAt(LocalDateTime.now());
+            return toResponse(procedureRepository.save(procedure));
+        } catch (Exception e) {
+            procedure.setCamundaProcessInstanceId(previousInstanceId);
+            procedure.setStatus(ProcedureStatus.OBSERVED);
+            procedureRepository.save(procedure);
+            throw new IllegalStateException("Error al reiniciar el tramite en Camunda: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
     public List<ProcedureResponse> getAll() {
         return procedureRepository.findAllByOrderByCreatedAtDesc()
                 .stream()
@@ -162,6 +250,7 @@ public class ProcedureServiceImpl implements ProcedureService {
                 p.getWorkflowVersion(),
                 p.getCamundaProcessKey(),
                 p.getCamundaProcessInstanceId(),
+                p.getPreviousCamundaProcessInstanceId(),
                 p.getApplicantId(),
                 p.getApplicantDocumentNumber(),
                 p.getApplicantName(),
@@ -178,11 +267,20 @@ public class ProcedureServiceImpl implements ProcedureService {
                 p.getLastCompletedTaskName(),
                 p.getLastCompletedBy(),
                 p.getLastCompletedAt(),
+                p.getResubmissionCount(),
+                p.getResolvedObservationBy(),
+                p.getResolvedObservationAt(),
+                p.getResolvedObservationComment(),
                 p.getStartedBy(),
                 p.getStartedAt(),
                 p.getCompletedAt(),
                 p.getCreatedAt(),
                 p.getUpdatedAt()
         );
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim();
     }
 }

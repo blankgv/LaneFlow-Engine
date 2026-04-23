@@ -2,6 +2,7 @@ package com.laneflow.engine.modules.operation.controller;
 
 import com.laneflow.engine.core.common.ApiVersion;
 import com.laneflow.engine.core.common.Permission;
+import com.laneflow.engine.modules.operation.request.ResolveObservationRequest;
 import com.laneflow.engine.modules.operation.request.StartProcedureRequest;
 import com.laneflow.engine.modules.operation.response.ProcedureResponse;
 import com.laneflow.engine.modules.operation.service.ProcedureService;
@@ -26,6 +27,13 @@ public class ProcedureController {
     @PreAuthorize("hasAuthority('" + Permission.TRAMITE_WRITE + "')")
     public ResponseEntity<ProcedureResponse> start(@Valid @RequestBody StartProcedureRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.start(request, currentUsername()));
+    }
+
+    @PostMapping("/{id}/resolve-observation")
+    @PreAuthorize("hasAuthority('" + Permission.TRAMITE_WRITE + "')")
+    public ResponseEntity<ProcedureResponse> resolveObservation(@PathVariable String id,
+                                                                 @Valid @RequestBody ResolveObservationRequest request) {
+        return ResponseEntity.ok(service.resolveObservation(id, request, currentUsername()));
     }
 
     @GetMapping
