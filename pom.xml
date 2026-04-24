@@ -118,6 +118,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Cloud SQL Java Connector for PostgreSQL -->
+        <dependency>
+            <groupId>com.google.cloud.sql</groupId>
+            <artifactId>postgres-socket-factory</artifactId>
+            <version>1.27.0</version>
+        </dependency>
+
         <!-- OpenAPI / Swagger UI (equivalente al /docs de FastAPI) -->
         <dependency>
             <groupId>org.springdoc</groupId>
