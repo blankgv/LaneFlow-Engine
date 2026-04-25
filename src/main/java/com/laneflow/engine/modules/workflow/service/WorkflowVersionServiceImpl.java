@@ -27,6 +27,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
     private final WorkflowVersionRepository workflowVersionRepository;
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
     private final RepositoryService repositoryService;
+    private final BpmnMetadataExtractor bpmnMetadataExtractor;
 
     @Override
     public List<WorkflowVersionResponse> findByWorkflow(String workflowId) {
@@ -65,6 +66,10 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
 
         if (request.bpmnXml() != null && !request.bpmnXml().isBlank()) {
             wf.setDraftBpmnXml(request.bpmnXml().trim());
+            BpmnMetadataExtractor.BpmnStructure structure = bpmnMetadataExtractor.extract(wf.getDraftBpmnXml());
+            wf.setSwimlanes(structure.swimlanes());
+            wf.setNodes(structure.nodes());
+            wf.setTransitions(structure.transitions());
             wf.setLastModifiedBy(createdBy);
             wf.setUpdatedAt(LocalDateTime.now());
             workflowDefinitionRepository.save(wf);

@@ -36,6 +36,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
     private final WorkflowVersionRepository workflowVersionRepository;
     private final RepositoryService repositoryService;
+    private final BpmnMetadataExtractor bpmnMetadataExtractor;
 
     @Override
     public List<WorkflowSummaryResponse> findAll() {
@@ -67,6 +68,13 @@ public class WorkflowServiceImpl implements WorkflowService {
         List<Swimlane> swimlanes = request.swimlanes() != null
                 ? request.swimlanes().stream().map(this::mapSwimlane).toList()
                 : List.of();
+
+        if (request.bpmnXml() != null && !request.bpmnXml().isBlank()) {
+            BpmnMetadataExtractor.BpmnStructure structure = bpmnMetadataExtractor.extract(request.bpmnXml());
+            swimlanes = structure.swimlanes();
+            nodes = structure.nodes();
+            transitions = structure.transitions();
+        }
 
         validateDraftPayload(request.bpmnXml(), nodes, transitions);
 
@@ -102,7 +110,15 @@ public class WorkflowServiceImpl implements WorkflowService {
 
         if (request.name() != null) wf.setName(request.name());
         if (request.description() != null) wf.setDescription(request.description());
-        if (request.bpmnXml() != null) wf.setDraftBpmnXml(normalizeXml(request.bpmnXml()));
+        if (request.bpmnXml() != null) {
+            wf.setDraftBpmnXml(normalizeXml(request.bpmnXml()));
+            if (wf.getDraftBpmnXml() != null) {
+                BpmnMetadataExtractor.BpmnStructure structure = bpmnMetadataExtractor.extract(wf.getDraftBpmnXml());
+                wf.setSwimlanes(structure.swimlanes());
+                wf.setNodes(structure.nodes());
+                wf.setTransitions(structure.transitions());
+            }
+        }
 
         if (request.swimlanes() != null) {
             wf.setSwimlanes(request.swimlanes().stream().map(s -> Swimlane.builder()
