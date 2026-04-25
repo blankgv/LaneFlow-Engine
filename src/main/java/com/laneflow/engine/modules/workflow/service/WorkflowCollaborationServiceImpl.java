@@ -1,6 +1,9 @@
 package com.laneflow.engine.modules.workflow.service;
 
+import com.laneflow.engine.core.common.Permission;
+import com.laneflow.engine.modules.admin.model.Role;
 import com.laneflow.engine.modules.admin.model.User;
+import com.laneflow.engine.modules.admin.repository.RoleRepository;
 import com.laneflow.engine.modules.admin.repository.UserRepository;
 import com.laneflow.engine.modules.workflow.model.WorkflowCollaborator;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
@@ -11,13 +14,16 @@ import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionReposit
 import com.laneflow.engine.modules.workflow.repository.WorkflowInvitationRepository;
 import com.laneflow.engine.modules.workflow.request.CreateWorkflowInvitationRequest;
 import com.laneflow.engine.modules.workflow.response.WorkflowCollaboratorResponse;
+import com.laneflow.engine.modules.workflow.response.WorkflowInviteeResponse;
 import com.laneflow.engine.modules.workflow.response.WorkflowInvitationResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +34,7 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
     private final WorkflowCollaboratorRepository workflowCollaboratorRepository;
     private final WorkflowInvitationRepository workflowInvitationRepository;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
 
     @Override
     public List<WorkflowCollaboratorResponse> findCollaborators(String workflowId) {
@@ -35,6 +42,26 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
         return workflowCollaboratorRepository.findByWorkflowDefinitionIdOrderByCreatedAtAsc(workflowId)
                 .stream()
                 .map(this::toCollaboratorResponse)
+                .toList();
+    }
+
+    @Override
+    public List<WorkflowInviteeResponse> findEligibleInvitees(String workflowId, String currentUsername) {
+        ensureWorkflowExists(workflowId);
+        User currentUser = findUserByUsername(currentUsername);
+
+        Set<String> excludedUserIds = new HashSet<>();
+        excludedUserIds.add(currentUser.getId());
+        workflowCollaboratorRepository.findByWorkflowDefinitionIdOrderByCreatedAtAsc(workflowId)
+                .forEach(collaborator -> excludedUserIds.add(collaborator.getUserId()));
+        workflowInvitationRepository.findByWorkflowDefinitionIdOrderByCreatedAtDesc(workflowId).stream()
+                .filter(invitation -> invitation.getStatus() == WorkflowInvitationStatus.PENDING)
+                .forEach(invitation -> excludedUserIds.add(invitation.getInvitedUserId()));
+
+        return userRepository.findByActiveTrueOrderByUsernameAsc().stream()
+                .filter(user -> !excludedUserIds.contains(user.getId()))
+                .filter(this::hasWorkflowAccess)
+                .map(this::toInviteeResponse)
                 .toList();
     }
 
@@ -64,6 +91,10 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
 
         if (!invitedUser.isActive()) {
             throw new IllegalStateException("No se puede invitar a un usuario inactivo.");
+        }
+
+        if (!hasWorkflowAccess(invitedUser)) {
+            throw new IllegalStateException("Solo se puede invitar a usuarios con permisos sobre workflow.");
         }
 
         if (invitedBy.getId().equals(invitedUser.getId())) {
@@ -154,6 +185,17 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
         return invitation;
     }
 
+    private boolean hasWorkflowAccess(User user) {
+        Role role = roleRepository.findById(user.getRoleId())
+                .orElseThrow(() -> new IllegalArgumentException("Rol no encontrado: " + user.getRoleId()));
+
+        return role.isActive()
+                && role.getPermissions() != null
+                && (role.getPermissions().contains(Permission.WORKFLOW_READ)
+                || role.getPermissions().contains(Permission.WORKFLOW_WRITE)
+                || role.getPermissions().containsAll(List.of(Permission.WORKFLOW_READ, Permission.WORKFLOW_WRITE)));
+    }
+
     private WorkflowCollaboratorResponse toCollaboratorResponse(WorkflowCollaborator collaborator) {
         User user = userRepository.findById(collaborator.getUserId())
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + collaborator.getUserId()));
@@ -184,6 +226,19 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
                 invitation.getStatus(),
                 invitation.getCreatedAt(),
                 invitation.getRespondedAt()
+        );
+    }
+
+    private WorkflowInviteeResponse toInviteeResponse(User user) {
+        Role role = roleRepository.findById(user.getRoleId())
+                .orElseThrow(() -> new IllegalArgumentException("Rol no encontrado: " + user.getRoleId()));
+        return new WorkflowInviteeResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                role.getId(),
+                role.getCode(),
+                role.getName()
         );
     }
 }

@@ -97,6 +97,7 @@ public class DataSeeder implements ApplicationRunner {
                 role("SUPERVISOR",    "Supervisor",       "Supervisa trámites y reportes",
                         List.of(Permission.DEPT_READ, Permission.STAFF_READ,
                                 Permission.TRAMITE_READ, Permission.TRAMITE_WRITE,
+                                Permission.WORKFLOW_READ, Permission.WORKFLOW_WRITE,
                                 Permission.REPORT_READ)),
                 role("SOLICITANTE",   "Solicitante",      "Inicia y consulta sus trámites",
                         List.of(Permission.TRAMITE_READ, Permission.TRAMITE_WRITE))
@@ -204,3 +205,4 @@ public class DataSeeder implements ApplicationRunner {
                 .build();
     }
 }
+

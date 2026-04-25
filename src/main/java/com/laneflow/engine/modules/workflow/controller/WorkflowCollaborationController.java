@@ -4,6 +4,7 @@ import com.laneflow.engine.core.common.ApiVersion;
 import com.laneflow.engine.core.common.Permission;
 import com.laneflow.engine.modules.workflow.request.CreateWorkflowInvitationRequest;
 import com.laneflow.engine.modules.workflow.response.WorkflowCollaboratorResponse;
+import com.laneflow.engine.modules.workflow.response.WorkflowInviteeResponse;
 import com.laneflow.engine.modules.workflow.response.WorkflowInvitationResponse;
 import com.laneflow.engine.modules.workflow.service.WorkflowCollaborationService;
 import jakarta.validation.Valid;
@@ -26,6 +27,12 @@ public class WorkflowCollaborationController {
     @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_READ + "')")
     public ResponseEntity<List<WorkflowCollaboratorResponse>> findCollaborators(@PathVariable String workflowId) {
         return ResponseEntity.ok(workflowCollaborationService.findCollaborators(workflowId));
+    }
+
+    @GetMapping(ApiVersion.V1 + "/workflows/{workflowId}/invitees")
+    @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_READ + "')")
+    public ResponseEntity<List<WorkflowInviteeResponse>> findEligibleInvitees(@PathVariable String workflowId) {
+        return ResponseEntity.ok(workflowCollaborationService.findEligibleInvitees(workflowId, currentUsername()));
     }
 
     @GetMapping(ApiVersion.V1 + "/workflows/{workflowId}/invitations")
