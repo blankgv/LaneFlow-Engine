@@ -53,7 +53,7 @@ public class WorkflowController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_WRITE + "')")
     public ResponseEntity<Void> delete(@PathVariable String id) {
-        workflowService.delete(id);
+        workflowService.delete(id, currentUsername());
         return ResponseEntity.noContent().build();
     }
 

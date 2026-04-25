@@ -8,6 +8,7 @@ import com.laneflow.engine.modules.admin.repository.UserRepository;
 import com.laneflow.engine.modules.workflow.model.WorkflowCollaborator;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.WorkflowInvitation;
+import com.laneflow.engine.modules.workflow.model.enums.WorkflowAuditAction;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowInvitationStatus;
 import com.laneflow.engine.modules.workflow.repository.WorkflowCollaboratorRepository;
 import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
@@ -35,6 +36,7 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
     private final WorkflowInvitationRepository workflowInvitationRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final WorkflowAuditService workflowAuditService;
 
     @Override
     public List<WorkflowCollaboratorResponse> findCollaborators(String workflowId) {
@@ -102,13 +104,13 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
         }
 
         if (workflowCollaboratorRepository.existsByWorkflowDefinitionIdAndUserId(workflowId, invitedUser.getId())) {
-            throw new IllegalStateException("El usuario ya es colaborador de esta política.");
+            throw new IllegalStateException("El usuario ya es colaborador de esta politica.");
         }
 
         workflowInvitationRepository
                 .findByWorkflowDefinitionIdAndInvitedUserIdAndStatus(workflowId, invitedUser.getId(), WorkflowInvitationStatus.PENDING)
                 .ifPresent(invitation -> {
-                    throw new IllegalStateException("Ya existe una invitación pendiente para este usuario.");
+                    throw new IllegalStateException("Ya existe una invitacion pendiente para este usuario.");
                 });
 
         WorkflowInvitation invitation = WorkflowInvitation.builder()
@@ -119,7 +121,21 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
                 .build();
 
         WorkflowInvitation saved = workflowInvitationRepository.save(invitation);
-        log.info("Invitación {} creada para workflow {}", saved.getId(), workflow.getCode());
+        workflowAuditService.record(
+                workflow,
+                WorkflowAuditAction.COLLABORATOR_INVITED,
+                "Invitacion enviada a colaborador.",
+                invitedBy.getUsername(),
+                workflow.getStatus(),
+                workflow.getStatus(),
+                java.util.Map.of(
+                        "workflowCode", workflow.getCode(),
+                        "workflowName", workflow.getName(),
+                        "invitedUsername", invitedUser.getUsername(),
+                        "invitationId", saved.getId()
+                )
+        );
+        log.info("Invitacion {} creada para workflow {}", saved.getId(), workflow.getCode());
         return toInvitationResponse(saved);
     }
 
@@ -132,6 +148,7 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
             throw new IllegalStateException("Solo se pueden aceptar invitaciones pendientes.");
         }
 
+        WorkflowDefinition workflow = ensureWorkflowExists(invitation.getWorkflowDefinitionId());
         invitation.setStatus(WorkflowInvitationStatus.ACCEPTED);
         invitation.setRespondedAt(LocalDateTime.now());
         workflowInvitationRepository.save(invitation);
@@ -147,6 +164,21 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
                     .build());
         }
 
+        workflowAuditService.record(
+                workflow,
+                WorkflowAuditAction.INVITATION_ACCEPTED,
+                "Invitacion aceptada por colaborador.",
+                invitedUser.getUsername(),
+                workflow.getStatus(),
+                workflow.getStatus(),
+                java.util.Map.of(
+                        "workflowCode", workflow.getCode(),
+                        "workflowName", workflow.getName(),
+                        "invitedUsername", invitedUser.getUsername(),
+                        "invitationId", invitation.getId()
+                )
+        );
+
         return toInvitationResponse(invitation);
     }
 
@@ -159,8 +191,23 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
             throw new IllegalStateException("Solo se pueden rechazar invitaciones pendientes.");
         }
 
+        WorkflowDefinition workflow = ensureWorkflowExists(invitation.getWorkflowDefinitionId());
         invitation.setStatus(WorkflowInvitationStatus.REJECTED);
         invitation.setRespondedAt(LocalDateTime.now());
+        workflowAuditService.record(
+                workflow,
+                WorkflowAuditAction.INVITATION_REJECTED,
+                "Invitacion rechazada por colaborador.",
+                invitedUser.getUsername(),
+                workflow.getStatus(),
+                workflow.getStatus(),
+                java.util.Map.of(
+                        "workflowCode", workflow.getCode(),
+                        "workflowName", workflow.getName(),
+                        "invitedUsername", invitedUser.getUsername(),
+                        "invitationId", invitation.getId()
+                )
+        );
         return toInvitationResponse(workflowInvitationRepository.save(invitation));
     }
 
@@ -176,10 +223,10 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
 
     private WorkflowInvitation findInvitationForUser(String invitationId, String userId) {
         WorkflowInvitation invitation = workflowInvitationRepository.findById(invitationId)
-                .orElseThrow(() -> new IllegalArgumentException("Invitación no encontrada: " + invitationId));
+                .orElseThrow(() -> new IllegalArgumentException("Invitacion no encontrada: " + invitationId));
 
         if (!userId.equals(invitation.getInvitedUserId())) {
-            throw new IllegalStateException("La invitación no pertenece al usuario autenticado.");
+            throw new IllegalStateException("La invitacion no pertenece al usuario autenticado.");
         }
 
         return invitation;

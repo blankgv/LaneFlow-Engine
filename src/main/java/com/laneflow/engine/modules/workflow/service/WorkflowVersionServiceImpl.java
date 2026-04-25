@@ -2,6 +2,7 @@ package com.laneflow.engine.modules.workflow.service;
 
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.WorkflowVersion;
+import com.laneflow.engine.modules.workflow.model.enums.WorkflowAuditAction;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowStatus;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowVersionStatus;
 import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
@@ -28,6 +29,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
     private final RepositoryService repositoryService;
     private final BpmnMetadataExtractor bpmnMetadataExtractor;
+    private final WorkflowAuditService workflowAuditService;
 
     @Override
     public List<WorkflowVersionResponse> findByWorkflow(String workflowId) {
@@ -76,6 +78,19 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
         }
 
         WorkflowVersion saved = workflowVersionRepository.save(version);
+        workflowAuditService.record(
+                wf,
+                WorkflowAuditAction.VERSION_DRAFT_CREATED,
+                "Creacion de una nueva version borrador.",
+                createdBy,
+                wf.getStatus(),
+                wf.getStatus(),
+                java.util.Map.of(
+                        "workflowCode", wf.getCode(),
+                        "workflowName", wf.getName(),
+                        "versionNumber", nextVersion
+                )
+        );
         log.info("Version {} DRAFT creada para workflow {}", nextVersion, wf.getCode());
         return toResponse(saved);
     }
@@ -84,6 +99,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
     public WorkflowVersionResponse publish(String workflowId, int versionNumber, String publishedBy) {
         WorkflowDefinition wf = workflowDefinitionRepository.findById(workflowId)
                 .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + workflowId));
+        WorkflowStatus statusBefore = wf.getStatus();
 
         WorkflowVersion version = workflowVersionRepository
                 .findByWorkflowDefinitionIdAndVersionNumber(workflowId, versionNumber)
@@ -146,7 +162,22 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
 
         version.setStatus(WorkflowVersionStatus.PUBLISHED);
         version.setPublishedAt(LocalDateTime.now());
-        workflowDefinitionRepository.save(wf);
+        WorkflowDefinition savedWorkflow = workflowDefinitionRepository.save(wf);
+        workflowAuditService.record(
+                savedWorkflow,
+                WorkflowAuditAction.VERSION_PUBLISHED,
+                "Publicacion de version desde el historial de versiones.",
+                publishedBy,
+                statusBefore,
+                savedWorkflow.getStatus(),
+                java.util.Map.of(
+                        "workflowCode", savedWorkflow.getCode(),
+                        "workflowName", savedWorkflow.getName(),
+                        "versionNumber", versionNumber,
+                        "camundaDeploymentId", version.getCamundaDeploymentId(),
+                        "camundaProcessDefinitionId", version.getCamundaProcessDefinitionId()
+                )
+        );
 
         return toResponse(workflowVersionRepository.save(version));
     }

@@ -19,7 +19,7 @@ public interface WorkflowService {
 
     WorkflowResponse publish(String id, String publishedBy);
 
-    void delete(String id);
+    void delete(String id, String deletedBy);
 
     WorkflowResponse validate(String id);
 }

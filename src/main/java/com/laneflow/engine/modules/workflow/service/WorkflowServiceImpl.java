@@ -6,6 +6,7 @@ import com.laneflow.engine.modules.workflow.model.embedded.Swimlane;
 import com.laneflow.engine.modules.workflow.model.embedded.WorkflowNode;
 import com.laneflow.engine.modules.workflow.model.embedded.WorkflowTransition;
 import com.laneflow.engine.modules.workflow.model.enums.NodeType;
+import com.laneflow.engine.modules.workflow.model.enums.WorkflowAuditAction;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowStatus;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowVersionStatus;
 import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
@@ -37,6 +38,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     private final WorkflowVersionRepository workflowVersionRepository;
     private final RepositoryService repositoryService;
     private final BpmnMetadataExtractor bpmnMetadataExtractor;
+    private final WorkflowAuditService workflowAuditService;
 
     @Override
     public List<WorkflowSummaryResponse> findAll() {
@@ -95,6 +97,18 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .build();
 
         WorkflowDefinition saved = workflowDefinitionRepository.save(wf);
+        workflowAuditService.record(
+                saved,
+                WorkflowAuditAction.WORKFLOW_CREATED,
+                "Creacion inicial de la politica.",
+                createdBy,
+                null,
+                saved.getStatus(),
+                Map.of(
+                        "workflowCode", saved.getCode(),
+                        "workflowName", saved.getName()
+                )
+        );
         log.info("Workflow creado: {} por {}", saved.getCode(), createdBy);
         return toResponse(saved);
     }
@@ -107,6 +121,8 @@ public class WorkflowServiceImpl implements WorkflowService {
         if (wf.getStatus() != WorkflowStatus.DRAFT) {
             throw new IllegalStateException("Solo se pueden editar workflows en estado DRAFT.");
         }
+
+        WorkflowStatus statusBefore = wf.getStatus();
 
         if (request.name() != null) wf.setName(request.name());
         if (request.description() != null) wf.setDescription(request.description());
@@ -157,13 +173,29 @@ public class WorkflowServiceImpl implements WorkflowService {
 
         wf.setLastModifiedBy(updatedBy);
         wf.setUpdatedAt(LocalDateTime.now());
-        return toResponse(workflowDefinitionRepository.save(wf));
+        WorkflowDefinition saved = workflowDefinitionRepository.save(wf);
+        workflowAuditService.record(
+                saved,
+                WorkflowAuditAction.WORKFLOW_UPDATED,
+                "Actualizacion del borrador de la politica.",
+                updatedBy,
+                statusBefore,
+                saved.getStatus(),
+                Map.of(
+                        "workflowCode", saved.getCode(),
+                        "workflowName", saved.getName(),
+                        "hasBpmnXml", saved.getDraftBpmnXml() != null
+                )
+        );
+        return toResponse(saved);
     }
 
     @Override
     public WorkflowResponse publish(String id, String publishedBy) {
         WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
+
+        WorkflowStatus statusBefore = wf.getStatus();
 
         String bpmnXml = BpmnDeploymentPreparer.prepareForDeployment(
                 resolveBpmnXmlForPublish(wf),
@@ -230,12 +262,28 @@ public class WorkflowServiceImpl implements WorkflowService {
         wf.setLastModifiedBy(publishedBy);
         wf.setPublishedAt(LocalDateTime.now());
         wf.setUpdatedAt(LocalDateTime.now());
+        WorkflowDefinition saved = workflowDefinitionRepository.save(wf);
+        workflowAuditService.record(
+                saved,
+                WorkflowAuditAction.WORKFLOW_PUBLISHED,
+                "Publicacion de la politica en Camunda.",
+                publishedBy,
+                statusBefore,
+                saved.getStatus(),
+                Map.of(
+                        "workflowCode", saved.getCode(),
+                        "workflowName", saved.getName(),
+                        "versionNumber", nextVersionNumber,
+                        "camundaDeploymentId", saved.getCamundaDeploymentId(),
+                        "camundaProcessDefinitionId", saved.getCamundaProcessDefinitionId()
+                )
+        );
 
-        return toResponse(workflowDefinitionRepository.save(wf));
+        return toResponse(saved);
     }
 
     @Override
-    public void delete(String id) {
+    public void delete(String id, String deletedBy) {
         WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
 
@@ -243,6 +291,18 @@ public class WorkflowServiceImpl implements WorkflowService {
             throw new IllegalStateException("Solo se pueden eliminar workflows en estado DRAFT.");
         }
 
+        workflowAuditService.record(
+                wf,
+                WorkflowAuditAction.WORKFLOW_DELETED,
+                "Eliminacion de la politica en borrador.",
+                deletedBy,
+                wf.getStatus(),
+                null,
+                Map.of(
+                        "workflowCode", wf.getCode(),
+                        "workflowName", wf.getName()
+                )
+        );
         workflowDefinitionRepository.delete(wf);
         log.info("Workflow eliminado: {}", wf.getCode());
     }
