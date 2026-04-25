@@ -2,6 +2,7 @@ package com.laneflow.engine.modules.workflow.service;
 
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.WorkflowVersion;
+import com.laneflow.engine.modules.workflow.model.enums.WorkflowStatus;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowVersionStatus;
 import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
 import com.laneflow.engine.modules.workflow.repository.WorkflowVersionRepository;
@@ -62,6 +63,13 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
                 .createdBy(createdBy)
                 .build();
 
+        if (request.bpmnXml() != null && !request.bpmnXml().isBlank()) {
+            wf.setDraftBpmnXml(request.bpmnXml().trim());
+            wf.setLastModifiedBy(createdBy);
+            wf.setUpdatedAt(LocalDateTime.now());
+            workflowDefinitionRepository.save(wf);
+        }
+
         WorkflowVersion saved = workflowVersionRepository.save(version);
         log.info("Version {} DRAFT creada para workflow {}", nextVersion, wf.getCode());
         return toResponse(saved);
@@ -81,6 +89,10 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
             throw new IllegalStateException("La versión ya está publicada.");
         }
 
+        if (version.getBpmnXml() == null || version.getBpmnXml().isBlank()) {
+            throw new IllegalStateException("La versión no tiene BPMN XML para publicar.");
+        }
+
         // Deprecate any existing PUBLISHED version
         workflowVersionRepository.findByWorkflowDefinitionIdAndStatus(workflowId, WorkflowVersionStatus.PUBLISHED)
                 .ifPresent(prev -> {
@@ -88,34 +100,48 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
                     workflowVersionRepository.save(prev);
                 });
 
-        String bpmnXml = version.getBpmnXml();
+        String bpmnXml = BpmnDeploymentPreparer.prepareForDeployment(
+                version.getBpmnXml(),
+                wf.getCamundaProcessKey(),
+                wf.getName()
+        );
 
-        if (bpmnXml != null && !bpmnXml.isBlank()) {
-            try {
-                Deployment deployment = repositoryService.createDeployment()
-                        .addInputStream(wf.getCamundaProcessKey() + "_v" + versionNumber + ".bpmn",
-                                new ByteArrayInputStream(bpmnXml.getBytes(StandardCharsets.UTF_8)))
-                        .name(wf.getName() + " v" + versionNumber)
-                        .deploy();
+        try {
+            Deployment deployment = repositoryService.createDeployment()
+                    .addInputStream(wf.getCamundaProcessKey() + "_v" + versionNumber + ".bpmn",
+                            new ByteArrayInputStream(bpmnXml.getBytes(StandardCharsets.UTF_8)))
+                    .name(wf.getName() + " v" + versionNumber)
+                    .deploy();
 
-                String processDefinitionId = repositoryService.createProcessDefinitionQuery()
-                        .deploymentId(deployment.getId())
-                        .singleResult()
-                        .getId();
+            String processDefinitionId = repositoryService.createProcessDefinitionQuery()
+                    .deploymentId(deployment.getId())
+                    .singleResult()
+                    .getId();
 
-                version.setCamundaDeploymentId(deployment.getId());
-                version.setCamundaProcessDefinitionId(processDefinitionId);
+            version.setCamundaDeploymentId(deployment.getId());
+            version.setCamundaProcessDefinitionId(processDefinitionId);
+            version.setBpmnXml(bpmnXml);
 
-                log.info("Version {} del workflow {} desplegada en Camunda. DeploymentId: {}",
-                        versionNumber, wf.getCode(), deployment.getId());
-            } catch (Exception e) {
-                log.error("Error al desplegar versión {} del workflow {}: {}", versionNumber, wf.getCode(), e.getMessage());
-                throw new IllegalStateException("Error al desplegar en Camunda: " + e.getMessage(), e);
-            }
+            wf.setCamundaDeploymentId(deployment.getId());
+            wf.setCamundaProcessDefinitionId(processDefinitionId);
+            wf.setCurrentVersion(versionNumber);
+            wf.setPublishedVersionNumber(versionNumber);
+            wf.setStatus(WorkflowStatus.PUBLISHED);
+            wf.setDraftBpmnXml(bpmnXml);
+            wf.setLastModifiedBy(publishedBy);
+            wf.setPublishedAt(LocalDateTime.now());
+            wf.setUpdatedAt(LocalDateTime.now());
+
+            log.info("Version {} del workflow {} desplegada en Camunda. DeploymentId: {}",
+                    versionNumber, wf.getCode(), deployment.getId());
+        } catch (Exception e) {
+            log.error("Error al desplegar versión {} del workflow {}: {}", versionNumber, wf.getCode(), e.getMessage());
+            throw new IllegalStateException("Error al desplegar en Camunda: " + e.getMessage(), e);
         }
 
         version.setStatus(WorkflowVersionStatus.PUBLISHED);
         version.setPublishedAt(LocalDateTime.now());
+        workflowDefinitionRepository.save(wf);
 
         return toResponse(workflowVersionRepository.save(version));
     }

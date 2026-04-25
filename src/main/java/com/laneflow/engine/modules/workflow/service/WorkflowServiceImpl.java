@@ -149,15 +149,24 @@ public class WorkflowServiceImpl implements WorkflowService {
         WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
 
-        validateStructure(wf.getNodes(), wf.getTransitions());
-
-        String bpmnXml = generateBpmnXml(wf);
+        String bpmnXml = BpmnDeploymentPreparer.prepareForDeployment(
+                resolveBpmnXmlForPublish(wf),
+                wf.getCamundaProcessKey(),
+                wf.getName()
+        );
+        int nextVersionNumber = resolveNextVersionNumber(wf.getId());
 
         try {
+            workflowVersionRepository.findByWorkflowDefinitionIdAndStatus(wf.getId(), WorkflowVersionStatus.PUBLISHED)
+                    .ifPresent(prev -> {
+                        prev.setStatus(WorkflowVersionStatus.DEPRECATED);
+                        workflowVersionRepository.save(prev);
+                    });
+
             Deployment deployment = repositoryService.createDeployment()
-                    .addInputStream(wf.getCamundaProcessKey() + ".bpmn",
+                    .addInputStream(wf.getCamundaProcessKey() + "_v" + nextVersionNumber + ".bpmn",
                             new ByteArrayInputStream(bpmnXml.getBytes(StandardCharsets.UTF_8)))
-                    .name(wf.getName())
+                    .name(wf.getName() + " v" + nextVersionNumber)
                     .deploy();
 
             String processDefinitionId = repositoryService.createProcessDefinitionQuery()
@@ -181,7 +190,7 @@ public class WorkflowServiceImpl implements WorkflowService {
 
             WorkflowVersion version = WorkflowVersion.builder()
                     .workflowDefinitionId(wf.getId())
-                    .versionNumber(wf.getCurrentVersion())
+                    .versionNumber(nextVersionNumber)
                     .bpmnXml(bpmnXml)
                     .status(WorkflowVersionStatus.PUBLISHED)
                     .camundaDeploymentId(deployment.getId())
@@ -199,7 +208,9 @@ public class WorkflowServiceImpl implements WorkflowService {
         }
 
         wf.setStatus(WorkflowStatus.PUBLISHED);
-        wf.setPublishedVersionNumber(wf.getCurrentVersion());
+        wf.setCurrentVersion(nextVersionNumber);
+        wf.setPublishedVersionNumber(nextVersionNumber);
+        wf.setDraftBpmnXml(bpmnXml);
         wf.setLastModifiedBy(publishedBy);
         wf.setPublishedAt(LocalDateTime.now());
         wf.setUpdatedAt(LocalDateTime.now());
@@ -237,6 +248,23 @@ public class WorkflowServiceImpl implements WorkflowService {
         }
 
         validateStructure(nodes, transitions);
+    }
+
+    private String resolveBpmnXmlForPublish(WorkflowDefinition wf) {
+        if (wf.getDraftBpmnXml() != null && !wf.getDraftBpmnXml().isBlank()) {
+            return wf.getDraftBpmnXml();
+        }
+
+        validateStructure(wf.getNodes(), wf.getTransitions());
+        return generateBpmnXml(wf);
+    }
+
+    private int resolveNextVersionNumber(String workflowId) {
+        return workflowVersionRepository.findByWorkflowDefinitionIdOrderByVersionNumberDesc(workflowId)
+                .stream()
+                .findFirst()
+                .map(version -> version.getVersionNumber() + 1)
+                .orElse(1);
     }
 
     private void validateStructure(List<WorkflowNode> nodes, List<WorkflowTransition> transitions) {
