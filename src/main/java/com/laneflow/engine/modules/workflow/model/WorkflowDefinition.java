@@ -40,12 +40,15 @@ public class WorkflowDefinition {
     private String camundaProcessKey;
     private String camundaDeploymentId;
     private String camundaProcessDefinitionId;
+    private String draftBpmnXml;
+    private Integer publishedVersionNumber;
 
     private List<Swimlane> swimlanes;
     private List<WorkflowNode> nodes;
     private List<WorkflowTransition> transitions;
 
     private String createdBy;
+    private String lastModifiedBy;
 
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

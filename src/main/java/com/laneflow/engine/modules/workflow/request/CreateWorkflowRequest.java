@@ -10,6 +10,7 @@ public record CreateWorkflowRequest(
         @NotBlank String code,
         @NotBlank String name,
         String description,
+        String bpmnXml,
         List<SwimlaneRequest> swimlanes,
         List<NodeRequest> nodes,
         List<TransitionRequest> transitions

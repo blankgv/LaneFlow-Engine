@@ -16,9 +16,13 @@ public record WorkflowResponse(
         WorkflowStatus status,
         int currentVersion,
         String camundaProcessKey,
+        String draftBpmnXml,
+        Integer publishedVersionNumber,
         List<Swimlane> swimlanes,
         List<WorkflowNode> nodes,
         List<WorkflowTransition> transitions,
+        String createdBy,
+        String lastModifiedBy,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         LocalDateTime publishedAt

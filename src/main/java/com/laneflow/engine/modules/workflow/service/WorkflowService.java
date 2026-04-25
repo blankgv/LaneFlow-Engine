@@ -15,7 +15,7 @@ public interface WorkflowService {
 
     WorkflowResponse create(CreateWorkflowRequest request, String createdBy);
 
-    WorkflowResponse update(String id, UpdateWorkflowRequest request);
+    WorkflowResponse update(String id, UpdateWorkflowRequest request, String updatedBy);
 
     WorkflowResponse publish(String id, String publishedBy);
 

@@ -47,7 +47,7 @@ public class WorkflowController {
     @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_WRITE + "')")
     public ResponseEntity<WorkflowResponse> update(@PathVariable String id,
                                                     @Valid @RequestBody UpdateWorkflowRequest request) {
-        return ResponseEntity.ok(workflowService.update(id, request));
+        return ResponseEntity.ok(workflowService.update(id, request, currentUsername()));
     }
 
     @DeleteMapping("/{id}")

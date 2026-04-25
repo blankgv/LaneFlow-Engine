@@ -68,7 +68,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                 ? request.swimlanes().stream().map(this::mapSwimlane).toList()
                 : List.of();
 
-        validateStructure(nodes, transitions);
+        validateDraftPayload(request.bpmnXml(), nodes, transitions);
 
         WorkflowDefinition wf = WorkflowDefinition.builder()
                 .code(request.code().toUpperCase())
@@ -77,10 +77,13 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .status(WorkflowStatus.DRAFT)
                 .currentVersion(1)
                 .camundaProcessKey("process_" + request.code().toLowerCase())
+                .draftBpmnXml(normalizeXml(request.bpmnXml()))
+                .publishedVersionNumber(null)
                 .swimlanes(swimlanes)
                 .nodes(nodes)
                 .transitions(transitions)
                 .createdBy(createdBy)
+                .lastModifiedBy(createdBy)
                 .build();
 
         WorkflowDefinition saved = workflowDefinitionRepository.save(wf);
@@ -89,7 +92,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     }
 
     @Override
-    public WorkflowResponse update(String id, UpdateWorkflowRequest request) {
+    public WorkflowResponse update(String id, UpdateWorkflowRequest request, String updatedBy) {
         WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
 
@@ -99,6 +102,7 @@ public class WorkflowServiceImpl implements WorkflowService {
 
         if (request.name() != null) wf.setName(request.name());
         if (request.description() != null) wf.setDescription(request.description());
+        if (request.bpmnXml() != null) wf.setDraftBpmnXml(normalizeXml(request.bpmnXml()));
 
         if (request.swimlanes() != null) {
             wf.setSwimlanes(request.swimlanes().stream().map(s -> Swimlane.builder()
@@ -133,10 +137,9 @@ public class WorkflowServiceImpl implements WorkflowService {
             wf.setTransitions(transitions);
         }
 
-        if (wf.getNodes() != null && wf.getTransitions() != null) {
-            validateStructure(wf.getNodes(), wf.getTransitions());
-        }
+        validateDraftPayload(wf.getDraftBpmnXml(), wf.getNodes(), wf.getTransitions());
 
+        wf.setLastModifiedBy(updatedBy);
         wf.setUpdatedAt(LocalDateTime.now());
         return toResponse(workflowDefinitionRepository.save(wf));
     }
@@ -196,6 +199,8 @@ public class WorkflowServiceImpl implements WorkflowService {
         }
 
         wf.setStatus(WorkflowStatus.PUBLISHED);
+        wf.setPublishedVersionNumber(wf.getCurrentVersion());
+        wf.setLastModifiedBy(publishedBy);
         wf.setPublishedAt(LocalDateTime.now());
         wf.setUpdatedAt(LocalDateTime.now());
 
@@ -220,11 +225,19 @@ public class WorkflowServiceImpl implements WorkflowService {
         WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
 
-        validateStructure(wf.getNodes(), wf.getTransitions());
+        validateDraftPayload(wf.getDraftBpmnXml(), wf.getNodes(), wf.getTransitions());
         return toResponse(wf);
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private void validateDraftPayload(String bpmnXml, List<WorkflowNode> nodes, List<WorkflowTransition> transitions) {
+        if (bpmnXml != null && !bpmnXml.isBlank()) {
+            return;
+        }
+
+        validateStructure(nodes, transitions);
+    }
 
     private void validateStructure(List<WorkflowNode> nodes, List<WorkflowTransition> transitions) {
         if (nodes == null || nodes.isEmpty()) {
@@ -313,6 +326,15 @@ public class WorkflowServiceImpl implements WorkflowService {
                     .replace("'", "&apos;");
     }
 
+    private String normalizeXml(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
     private Swimlane mapSwimlane(CreateWorkflowRequest.SwimlaneRequest s) {
         return Swimlane.builder()
                 .id(s.id())
@@ -352,6 +374,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                 wf.getDescription(),
                 wf.getStatus(),
                 wf.getCurrentVersion(),
+                wf.getPublishedVersionNumber(),
                 wf.getCreatedAt(),
                 wf.getUpdatedAt()
         );
@@ -366,9 +389,13 @@ public class WorkflowServiceImpl implements WorkflowService {
                 wf.getStatus(),
                 wf.getCurrentVersion(),
                 wf.getCamundaProcessKey(),
+                wf.getDraftBpmnXml(),
+                wf.getPublishedVersionNumber(),
                 wf.getSwimlanes(),
                 wf.getNodes(),
                 wf.getTransitions(),
+                wf.getCreatedBy(),
+                wf.getLastModifiedBy(),
                 wf.getCreatedAt(),
                 wf.getUpdatedAt(),
                 wf.getPublishedAt()
