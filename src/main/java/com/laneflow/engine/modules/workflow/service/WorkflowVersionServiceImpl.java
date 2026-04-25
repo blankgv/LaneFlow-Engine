@@ -30,6 +30,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
     private final RepositoryService repositoryService;
     private final BpmnMetadataExtractor bpmnMetadataExtractor;
     private final WorkflowAuditService workflowAuditService;
+    private final DynamicFormService dynamicFormService;
 
     @Override
     public List<WorkflowVersionResponse> findByWorkflow(String workflowId) {
@@ -72,6 +73,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
             wf.setSwimlanes(structure.swimlanes());
             wf.setNodes(structure.nodes());
             wf.setTransitions(structure.transitions());
+            dynamicFormService.syncNodeBindings(wf.getId(), wf.getNodes());
             wf.setLastModifiedBy(createdBy);
             wf.setUpdatedAt(LocalDateTime.now());
             workflowDefinitionRepository.save(wf);

@@ -32,6 +32,15 @@ public class DynamicFormController {
         return ResponseEntity.ok(dynamicFormService.findByWorkflow(workflowId));
     }
 
+    @GetMapping("/by-node")
+    @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_READ + "')")
+    public ResponseEntity<DynamicFormResponse> findByWorkflowAndNode(
+            @RequestParam String workflowId,
+            @RequestParam String nodeId
+    ) {
+        return ResponseEntity.ok(dynamicFormService.findByWorkflowAndNode(workflowId, nodeId));
+    }
+
     @PostMapping
     @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_WRITE + "')")
     public ResponseEntity<DynamicFormResponse> create(@Valid @RequestBody CreateFormRequest request) {

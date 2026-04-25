@@ -39,6 +39,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     private final RepositoryService repositoryService;
     private final BpmnMetadataExtractor bpmnMetadataExtractor;
     private final WorkflowAuditService workflowAuditService;
+    private final DynamicFormService dynamicFormService;
 
     @Override
     public List<WorkflowSummaryResponse> findAll() {
@@ -97,6 +98,8 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .build();
 
         WorkflowDefinition saved = workflowDefinitionRepository.save(wf);
+        dynamicFormService.syncNodeBindings(saved.getId(), saved.getNodes());
+        saved = workflowDefinitionRepository.save(saved);
         workflowAuditService.record(
                 saved,
                 WorkflowAuditAction.WORKFLOW_CREATED,
@@ -133,6 +136,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                 wf.setSwimlanes(structure.swimlanes());
                 wf.setNodes(structure.nodes());
                 wf.setTransitions(structure.transitions());
+                dynamicFormService.syncNodeBindings(wf.getId(), wf.getNodes());
             }
         }
 
@@ -173,6 +177,7 @@ public class WorkflowServiceImpl implements WorkflowService {
 
         wf.setLastModifiedBy(updatedBy);
         wf.setUpdatedAt(LocalDateTime.now());
+        dynamicFormService.syncNodeBindings(wf.getId(), wf.getNodes());
         WorkflowDefinition saved = workflowDefinitionRepository.save(wf);
         workflowAuditService.record(
                 saved,

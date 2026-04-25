@@ -1,5 +1,6 @@
 package com.laneflow.engine.modules.workflow.service;
 
+import com.laneflow.engine.modules.workflow.model.embedded.WorkflowNode;
 import com.laneflow.engine.modules.workflow.request.CreateFieldRequest;
 import com.laneflow.engine.modules.workflow.request.CreateFormRequest;
 import com.laneflow.engine.modules.workflow.request.ReorderFieldsRequest;
@@ -13,6 +14,8 @@ import java.util.List;
 public interface DynamicFormService {
 
     List<DynamicFormResponse> findByWorkflow(String workflowId);
+
+    DynamicFormResponse findByWorkflowAndNode(String workflowId, String nodeId);
 
     DynamicFormResponse findById(String id);
 
@@ -29,4 +32,6 @@ public interface DynamicFormService {
     void deleteField(String formId, String fieldId);
 
     List<FormFieldResponse> reorderFields(String formId, ReorderFieldsRequest request);
+
+    void syncNodeBindings(String workflowId, List<WorkflowNode> nodes);
 }
