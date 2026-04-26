@@ -139,7 +139,9 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
                 wf.getName(),
                 publishStructure.swimlanes(),
                 publishStructure.nodes(),
-                publishStructure.transitions()
+                publishStructure.transitions(),
+                publishStructure.participantCount(),
+                publishStructure.laneCount()
         );
         wf.setSwimlanes(publishStructure.swimlanes());
         wf.setNodes(publishStructure.nodes());

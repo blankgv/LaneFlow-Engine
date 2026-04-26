@@ -25,7 +25,7 @@ class WorkflowModelValidator {
     }
 
     void validatePublishable(WorkflowDefinition workflow) {
-        validatePublishable(workflow.getCode(), workflow.getName(), workflow.getSwimlanes(), workflow.getNodes(), workflow.getTransitions());
+        validatePublishable(workflow.getCode(), workflow.getName(), workflow.getSwimlanes(), workflow.getNodes(), workflow.getTransitions(), 0, workflow.getSwimlanes() == null ? 0 : workflow.getSwimlanes().size());
     }
 
     void validatePublishable(
@@ -33,7 +33,9 @@ class WorkflowModelValidator {
             String workflowName,
             List<Swimlane> swimlanes,
             List<WorkflowNode> nodes,
-            List<WorkflowTransition> transitions
+            List<WorkflowTransition> transitions,
+            int participantCount,
+            int laneCount
     ) {
         validateStrictStructure(swimlanes, nodes, transitions);
 
@@ -43,6 +45,14 @@ class WorkflowModelValidator {
 
         if (userTasks.isEmpty()) {
             throw new IllegalArgumentException("La politica debe tener al menos una User Task antes de publicarse.");
+        }
+
+        if (participantCount > 1) {
+            throw new IllegalArgumentException("La politica solo puede tener un pool principal.");
+        }
+
+        if (laneCount == 0) {
+            throw new IllegalArgumentException("La politica debe tener al menos una lane que represente un departamento.");
         }
 
         if (swimlanes == null || swimlanes.isEmpty()) {

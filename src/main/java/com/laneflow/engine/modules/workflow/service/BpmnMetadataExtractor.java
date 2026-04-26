@@ -52,6 +52,7 @@ class BpmnMetadataExtractor {
             Map<String, String> processNamesById = loadProcessNames(document);
 
             NodeList laneNodes = document.getElementsByTagNameNS("*", "lane");
+            int laneCount = laneNodes.getLength();
             for (int i = 0; i < laneNodes.getLength(); i++) {
                 Element lane = (Element) laneNodes.item(i);
                 String laneId = lane.getAttribute("id");
@@ -75,6 +76,8 @@ class BpmnMetadataExtractor {
             }
 
             NodeList participantNodes = document.getElementsByTagNameNS("*", "participant");
+            int participantCount = participantNodes.getLength();
+            boolean useParticipantsAsSwimlanes = laneCount == 0;
             for (int i = 0; i < participantNodes.getLength(); i++) {
                 Element participant = (Element) participantNodes.item(i);
                 String participantId = trimToNull(participant.getAttribute("id"));
@@ -83,37 +86,39 @@ class BpmnMetadataExtractor {
                     continue;
                 }
 
-                String participantName = firstNonBlank(
-                        firstNonBlank(
-                                trimToNull(participant.getAttribute("name")),
-                                processNamesById.get(processRef)
-                        ),
-                        processRef
-                );
-                DepartmentRef department = resolveDepartment(participantName, departmentsByNormalizedKey);
+                if (useParticipantsAsSwimlanes) {
+                    String participantName = firstNonBlank(
+                            firstNonBlank(
+                                    trimToNull(participant.getAttribute("name")),
+                                    processNamesById.get(processRef)
+                            ),
+                            processRef
+                    );
+                    DepartmentRef department = resolveDepartment(participantName, departmentsByNormalizedKey);
 
-                swimlanesById.putIfAbsent(participantId, Swimlane.builder()
-                        .id(participantId)
-                        .name(participantName)
-                        .departmentId(department == null ? null : department.id())
-                        .departmentCode(department == null ? null : department.code())
-                        .build());
+                    swimlanesById.putIfAbsent(participantId, Swimlane.builder()
+                            .id(participantId)
+                            .name(participantName)
+                            .departmentId(department == null ? null : department.id())
+                            .departmentCode(department == null ? null : department.code())
+                            .build());
 
-                processSwimlaneMap.put(processRef, participantId);
+                    processSwimlaneMap.put(processRef, participantId);
+                }
             }
 
             List<WorkflowNode> nodes = new ArrayList<>();
-            addNodes(document, "startEvent", NodeType.START_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "endEvent", NodeType.END_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "intermediateCatchEvent", NodeType.INTERMEDIATE_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "intermediateThrowEvent", NodeType.INTERMEDIATE_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "boundaryEvent", NodeType.INTERMEDIATE_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "task", NodeType.USER_TASK, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "userTask", NodeType.USER_TASK, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "serviceTask", NodeType.SERVICE_TASK, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "exclusiveGateway", NodeType.EXCLUSIVE_GATEWAY, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "parallelGateway", NodeType.PARALLEL_GATEWAY, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
-            addNodes(document, "inclusiveGateway", NodeType.INCLUSIVE_GATEWAY, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
+            addNodes(document, "startEvent", NodeType.START_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "endEvent", NodeType.END_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "intermediateCatchEvent", NodeType.INTERMEDIATE_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "intermediateThrowEvent", NodeType.INTERMEDIATE_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "boundaryEvent", NodeType.INTERMEDIATE_EVENT, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "task", NodeType.USER_TASK, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "userTask", NodeType.USER_TASK, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "serviceTask", NodeType.SERVICE_TASK, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "exclusiveGateway", NodeType.EXCLUSIVE_GATEWAY, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "parallelGateway", NodeType.PARALLEL_GATEWAY, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
+            addNodes(document, "inclusiveGateway", NodeType.INCLUSIVE_GATEWAY, nodeLaneMap, processSwimlaneMap, swimlanesById, departmentsByNormalizedKey, useParticipantsAsSwimlanes, nodes);
 
             List<WorkflowTransition> transitions = new ArrayList<>();
             NodeList flowNodes = document.getElementsByTagNameNS("*", "sequenceFlow");
@@ -128,7 +133,7 @@ class BpmnMetadataExtractor {
                         .build());
             }
 
-            return new BpmnStructure(new ArrayList<>(swimlanesById.values()), nodes, transitions);
+            return new BpmnStructure(new ArrayList<>(swimlanesById.values()), nodes, transitions, participantCount, laneCount);
         } catch (Exception e) {
             throw new IllegalArgumentException("El BPMN XML no es válido: " + e.getMessage(), e);
         }
@@ -142,6 +147,7 @@ class BpmnMetadataExtractor {
             Map<String, String> processSwimlaneMap,
             Map<String, Swimlane> swimlanesById,
             Map<String, DepartmentRef> departmentsByNormalizedKey,
+            boolean useParticipantsAsSwimlanes,
             List<WorkflowNode> target
     ) {
         NodeList xmlNodes = document.getElementsByTagNameNS("*", tagName);
@@ -149,7 +155,7 @@ class BpmnMetadataExtractor {
             Element element = (Element) xmlNodes.item(i);
             String nodeId = element.getAttribute("id");
             String swimlaneId = nodeLaneMap.get(nodeId);
-            if (swimlaneId == null) {
+            if (swimlaneId == null && useParticipantsAsSwimlanes) {
                 String processId = resolveOwningProcessId(element);
                 if (processId != null) {
                     swimlaneId = processSwimlaneMap.get(processId);
@@ -266,7 +272,9 @@ class BpmnMetadataExtractor {
     record BpmnStructure(
             List<Swimlane> swimlanes,
             List<WorkflowNode> nodes,
-            List<WorkflowTransition> transitions
+            List<WorkflowTransition> transitions,
+            int participantCount,
+            int laneCount
     ) {}
 
     private record DepartmentRef(String id, String code) {}
