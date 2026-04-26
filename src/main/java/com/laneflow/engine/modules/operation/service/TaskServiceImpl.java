@@ -24,6 +24,8 @@ import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.embedded.Swimlane;
 import com.laneflow.engine.modules.workflow.model.embedded.WorkflowNode;
 import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
+import com.laneflow.engine.modules.workflow.response.DynamicFormResponse;
+import com.laneflow.engine.modules.workflow.service.DynamicFormService;
 import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.runtime.ProcessInstance;
@@ -50,6 +52,8 @@ public class TaskServiceImpl implements TaskService {
     private final DepartmentRepository departmentRepository;
     private final ProcedureAuditService procedureAuditService;
     private final ProcedureNotificationService procedureNotificationService;
+    private final DynamicFormService dynamicFormService;
+    private final TaskFormSubmissionValidator taskFormSubmissionValidator;
 
     @Override
     public List<TaskResponse> getAvailable(String username) {
@@ -73,6 +77,21 @@ public class TaskServiceImpl implements TaskService {
                 .stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    @Override
+    public TaskResponse getById(String taskId, String username) {
+        Task task = camundaTaskService.createTaskQuery()
+                .taskId(taskId)
+                .active()
+                .singleResult();
+
+        if (task == null) {
+            throw new IllegalArgumentException("Tarea no encontrada o no activa: " + taskId);
+        }
+
+        ensureCanView(task, username);
+        return toResponse(task);
     }
 
     @Override
@@ -153,6 +172,7 @@ public class TaskServiceImpl implements TaskService {
         if (request.formData() != null) {
             mergedFormData.putAll(request.formData());
         }
+        taskFormSubmissionValidator.validate(procedure, task, request.formData(), mergedFormData);
 
         Map<String, Object> variables = new HashMap<>();
         variables.putAll(mergedFormData);
@@ -267,6 +287,20 @@ public class TaskServiceImpl implements TaskService {
         return responsible.departmentId() != null && responsible.departmentId().equals(staff.getDepartmentId());
     }
 
+    private void ensureCanView(Task task, String username) {
+        if (task.getAssignee() != null && !task.getAssignee().isBlank()) {
+            if (!username.equals(task.getAssignee())) {
+                throw new IllegalStateException("La tarea esta asignada a otro usuario: " + task.getAssignee());
+            }
+            return;
+        }
+
+        Staff staff = currentStaff(username);
+        if (!canClaim(task, staff)) {
+            throw new IllegalStateException("El usuario no puede acceder a esta tarea.");
+        }
+    }
+
     private Staff currentStaff(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + username));
@@ -348,6 +382,9 @@ public class TaskServiceImpl implements TaskService {
     private TaskResponse toResponse(Task task) {
         Procedure procedure = resolveProcedure(task);
         ResponsibleDepartment responsible = resolveResponsibleDepartment(task);
+        DynamicFormResponse form = dynamicFormService
+                .findOptionalByWorkflowAndNode(procedure.getWorkflowDefinitionId(), task.getTaskDefinitionKey())
+                .orElse(null);
         return new TaskResponse(
                 task.getId(),
                 task.getName(),
@@ -362,6 +399,7 @@ public class TaskServiceImpl implements TaskService {
                 task.getAssignee(),
                 responsible.departmentId(),
                 responsible.departmentCode(),
+                form,
                 task.getCreateTime() == null ? null : LocalDateTime.ofInstant(
                         task.getCreateTime().toInstant(),
                         ZoneId.systemDefault()

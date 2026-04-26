@@ -11,6 +11,7 @@ public record WorkflowSummaryResponse(
         String description,
         WorkflowStatus status,
         int currentVersion,
+        Integer publishedVersionNumber,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

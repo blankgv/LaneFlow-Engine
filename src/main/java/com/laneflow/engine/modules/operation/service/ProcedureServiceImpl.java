@@ -43,6 +43,7 @@ public class ProcedureServiceImpl implements ProcedureService {
     private final org.camunda.bpm.engine.TaskService taskService;
     private final ProcedureAuditService procedureAuditService;
     private final ProcedureNotificationService procedureNotificationService;
+    private final TaskFormSubmissionValidator taskFormSubmissionValidator;
 
     @Override
     public ProcedureResponse start(StartProcedureRequest request, String startedBy) {
@@ -81,6 +82,7 @@ public class ProcedureServiceImpl implements ProcedureService {
                 .startedBy(startedBy)
                 .startedAt(now)
                 .build());
+        String startedInstanceId = null;
 
         try {
             Map<String, Object> variables = buildProcessVariables(procedure);
@@ -89,6 +91,7 @@ public class ProcedureServiceImpl implements ProcedureService {
                     procedure.getId(),
                     variables
             );
+            startedInstanceId = instance.getId();
 
             Task activeTask = taskService.createTaskQuery()
                     .processInstanceId(instance.getId())
@@ -104,6 +107,13 @@ public class ProcedureServiceImpl implements ProcedureService {
                 procedure.setCurrentTaskId(activeTask.getId());
                 procedure.setCurrentNodeId(activeTask.getTaskDefinitionKey());
                 procedure.setCurrentNodeName(activeTask.getName());
+                taskFormSubmissionValidator.validate(
+                        procedure,
+                        activeTask.getId(),
+                        activeTask.getTaskDefinitionKey(),
+                        request.formData(),
+                        procedure.getFormData()
+                );
             }
             procedure.setUpdatedAt(LocalDateTime.now());
             Procedure saved = procedureRepository.save(procedure);
@@ -126,6 +136,9 @@ public class ProcedureServiceImpl implements ProcedureService {
             procedureNotificationService.notifyApplicant(saved, NotificationType.PROCEDURE_STARTED);
             return toResponse(saved);
         } catch (Exception e) {
+            if (startedInstanceId != null) {
+                safeDeleteProcessInstance(startedInstanceId, "Rollback por validacion al iniciar tramite");
+            }
             procedureRepository.delete(procedure);
             throw new IllegalStateException("Error al iniciar el tramite en Camunda: " + e.getMessage(), e);
         }
@@ -189,6 +202,7 @@ public class ProcedureServiceImpl implements ProcedureService {
         procedure.setResubmissionCount(procedure.getResubmissionCount() + 1);
         procedure.setCompletedAt(null);
         procedure.setUpdatedAt(LocalDateTime.now());
+        String restartedInstanceId = null;
 
         try {
             Map<String, Object> variables = buildProcessVariables(procedure);
@@ -202,6 +216,7 @@ public class ProcedureServiceImpl implements ProcedureService {
                     procedure.getId(),
                     variables
             );
+            restartedInstanceId = instance.getId();
 
             Task activeTask = taskService.createTaskQuery()
                     .processInstanceId(instance.getId())
@@ -220,6 +235,13 @@ public class ProcedureServiceImpl implements ProcedureService {
                 procedure.setCurrentTaskId(activeTask.getId());
                 procedure.setCurrentNodeId(activeTask.getTaskDefinitionKey());
                 procedure.setCurrentNodeName(activeTask.getName());
+                taskFormSubmissionValidator.validate(
+                        procedure,
+                        activeTask.getId(),
+                        activeTask.getTaskDefinitionKey(),
+                        request.formData(),
+                        mergedFormData
+                );
             } else {
                 procedure.setCurrentTaskId(null);
                 procedure.setCurrentNodeId(null);
@@ -265,6 +287,9 @@ public class ProcedureServiceImpl implements ProcedureService {
             procedure.setClaimedAt(originalClaimedAt);
             procedure.setStatus(statusBefore);
             procedureRepository.save(procedure);
+            if (restartedInstanceId != null) {
+                safeDeleteProcessInstance(restartedInstanceId, "Rollback por validacion al subsanar observacion");
+            }
             throw new IllegalStateException("Error al reiniciar el tramite en Camunda: " + e.getMessage(), e);
         }
     }
@@ -359,5 +384,12 @@ public class ProcedureServiceImpl implements ProcedureService {
     private String trimToNull(String value) {
         if (value == null || value.isBlank()) return null;
         return value.trim();
+    }
+
+    private void safeDeleteProcessInstance(String instanceId, String reason) {
+        try {
+            runtimeService.deleteProcessInstance(instanceId, reason);
+        } catch (Exception ignored) {
+        }
     }
 }

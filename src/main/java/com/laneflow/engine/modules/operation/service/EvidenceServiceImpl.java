@@ -35,6 +35,7 @@ public class EvidenceServiceImpl implements EvidenceService {
     private static final Set<FieldType> FILE_FIELD_TYPES = Set.of(
             FieldType.FILE,
             FieldType.IMAGE,
+            FieldType.PHOTO,
             FieldType.AUDIO,
             FieldType.DOCUMENT,
             FieldType.VIDEO
@@ -73,7 +74,13 @@ public class EvidenceServiceImpl implements EvidenceService {
 
         String originalFileName = resolveOriginalFileName(file);
         String extension = resolveExtension(originalFileName);
-        String objectName = buildObjectName(procedureId, nodeId, fieldName, originalFileName);
+        String objectName = buildObjectName(
+                procedureId,
+                nodeId,
+                fieldName,
+                originalFileName,
+                fieldContext.field().getFileConfig()
+        );
         StoredObject stored = storageService.upload(file, objectName);
 
         Evidence saved = evidenceRepository.save(Evidence.builder()
@@ -94,7 +101,7 @@ public class EvidenceServiceImpl implements EvidenceService {
                 .storagePath(stored.objectName())
                 .mediaLink(stored.mediaLink())
                 .description(trimToNull(description))
-                .category(category != null ? category : EvidenceCategory.GENERAL)
+                .category(resolveCategory(category, fieldContext.field()))
                 .build());
 
         procedureAuditService.record(
@@ -240,11 +247,28 @@ public class EvidenceServiceImpl implements EvidenceService {
         }
     }
 
-    private String buildObjectName(String procedureId, String nodeId, String fieldName, String originalFileName) {
+    private String buildObjectName(String procedureId,
+                                   String nodeId,
+                                   String fieldName,
+                                   String originalFileName,
+                                   FileConfig config) {
         String extension = resolveExtension(originalFileName);
         String safeName = sanitizeFileName(stripExtension(originalFileName));
         String fileName = UUID.randomUUID() + "-" + safeName + (extension.isBlank() ? "" : "." + extension);
-        return trimSlashes(evidencePrefix) + "/" + procedureId + "/" + nodeId + "/" + fieldName + "/" + fileName;
+        StringBuilder objectName = new StringBuilder(trimSlashes(evidencePrefix))
+                .append("/")
+                .append(procedureId)
+                .append("/")
+                .append(nodeId)
+                .append("/");
+
+        String bucketFolder = config != null ? trimToNull(config.getBucketFolder()) : null;
+        if (bucketFolder != null) {
+            objectName.append(trimSlashes(bucketFolder)).append("/");
+        }
+
+        objectName.append(fieldName).append("/").append(fileName);
+        return objectName.toString();
     }
 
     private String resolveOriginalFileName(MultipartFile file) {
@@ -288,6 +312,18 @@ public class EvidenceServiceImpl implements EvidenceService {
     private String trimToNull(String value) {
         if (value == null || value.isBlank()) return null;
         return value.trim();
+    }
+
+    private EvidenceCategory resolveCategory(EvidenceCategory category, FormField field) {
+        if (category != null) {
+            return category;
+        }
+
+        return switch (field.getType()) {
+            case IMAGE, PHOTO -> EvidenceCategory.PHOTO;
+            case DOCUMENT -> EvidenceCategory.SUPPORT_DOCUMENT;
+            default -> EvidenceCategory.GENERAL;
+        };
     }
 
     private EvidenceResponse toResponse(Evidence e) {

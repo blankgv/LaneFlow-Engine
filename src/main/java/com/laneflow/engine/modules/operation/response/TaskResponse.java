@@ -1,5 +1,7 @@
 package com.laneflow.engine.modules.operation.response;
 
+import com.laneflow.engine.modules.workflow.response.DynamicFormResponse;
+
 import java.time.LocalDateTime;
 
 public record TaskResponse(
@@ -16,5 +18,6 @@ public record TaskResponse(
         String assignee,
         String responsibleDepartmentId,
         String responsibleDepartmentCode,
+        DynamicFormResponse form,
         LocalDateTime createdAt
 ) {}

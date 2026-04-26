@@ -7,6 +7,7 @@ import java.util.List;
 public record UpdateWorkflowRequest(
         String name,
         String description,
+        String bpmnXml,
         List<SwimlaneRequest> swimlanes,
         List<NodeRequest> nodes,
         List<TransitionRequest> transitions

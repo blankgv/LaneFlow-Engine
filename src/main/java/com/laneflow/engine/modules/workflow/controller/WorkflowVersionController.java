@@ -25,7 +25,7 @@ public class WorkflowVersionController {
     @GetMapping
     @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_READ + "')")
     public ResponseEntity<List<WorkflowVersionResponse>> findByWorkflow(@PathVariable String workflowId) {
-        return ResponseEntity.ok(workflowVersionService.findByWorkflow(workflowId));
+        return ResponseEntity.ok(workflowVersionService.findByWorkflow(workflowId, currentUsername()));
     }
 
     @GetMapping("/{versionNumber}")
@@ -33,7 +33,7 @@ public class WorkflowVersionController {
     public ResponseEntity<WorkflowVersionResponse> findByWorkflowAndVersion(
             @PathVariable String workflowId,
             @PathVariable int versionNumber) {
-        return ResponseEntity.ok(workflowVersionService.findByWorkflowAndVersion(workflowId, versionNumber));
+        return ResponseEntity.ok(workflowVersionService.findByWorkflowAndVersion(workflowId, versionNumber, currentUsername()));
     }
 
     @PostMapping

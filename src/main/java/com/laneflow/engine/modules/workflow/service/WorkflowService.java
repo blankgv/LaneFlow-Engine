@@ -9,17 +9,17 @@ import java.util.List;
 
 public interface WorkflowService {
 
-    List<WorkflowSummaryResponse> findAll();
+    List<WorkflowSummaryResponse> findAll(String username);
 
-    WorkflowResponse findById(String id);
+    WorkflowResponse findById(String id, String username);
 
     WorkflowResponse create(CreateWorkflowRequest request, String createdBy);
 
-    WorkflowResponse update(String id, UpdateWorkflowRequest request);
+    WorkflowResponse update(String id, UpdateWorkflowRequest request, String updatedBy);
 
     WorkflowResponse publish(String id, String publishedBy);
 
-    void delete(String id);
+    void delete(String id, String deletedBy);
 
-    WorkflowResponse validate(String id);
+    WorkflowResponse validate(String id, String username);
 }

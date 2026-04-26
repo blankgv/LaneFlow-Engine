@@ -6,6 +6,7 @@ import com.laneflow.engine.modules.workflow.model.embedded.Swimlane;
 import com.laneflow.engine.modules.workflow.model.embedded.WorkflowNode;
 import com.laneflow.engine.modules.workflow.model.embedded.WorkflowTransition;
 import com.laneflow.engine.modules.workflow.model.enums.NodeType;
+import com.laneflow.engine.modules.workflow.model.enums.WorkflowAuditAction;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowStatus;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowVersionStatus;
 import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
@@ -36,19 +37,22 @@ public class WorkflowServiceImpl implements WorkflowService {
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
     private final WorkflowVersionRepository workflowVersionRepository;
     private final RepositoryService repositoryService;
+    private final BpmnMetadataExtractor bpmnMetadataExtractor;
+    private final WorkflowAuditService workflowAuditService;
+    private final DynamicFormService dynamicFormService;
+    private final WorkflowAccessService workflowAccessService;
 
     @Override
-    public List<WorkflowSummaryResponse> findAll() {
-        return workflowDefinitionRepository.findAll()
+    public List<WorkflowSummaryResponse> findAll(String username) {
+        return workflowAccessService.filterReadable(workflowDefinitionRepository.findAll(), username)
                 .stream()
                 .map(this::toSummaryResponse)
                 .toList();
     }
 
     @Override
-    public WorkflowResponse findById(String id) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
+    public WorkflowResponse findById(String id, String username) {
+        WorkflowDefinition wf = workflowAccessService.requireReadable(id, username);
         return toResponse(wf);
     }
 
@@ -68,7 +72,14 @@ public class WorkflowServiceImpl implements WorkflowService {
                 ? request.swimlanes().stream().map(this::mapSwimlane).toList()
                 : List.of();
 
-        validateStructure(nodes, transitions);
+        if (request.bpmnXml() != null && !request.bpmnXml().isBlank()) {
+            BpmnMetadataExtractor.BpmnStructure structure = bpmnMetadataExtractor.extract(request.bpmnXml());
+            swimlanes = structure.swimlanes();
+            nodes = structure.nodes();
+            transitions = structure.transitions();
+        }
+
+        validateDraftPayload(request.bpmnXml(), nodes, transitions);
 
         WorkflowDefinition wf = WorkflowDefinition.builder()
                 .code(request.code().toUpperCase())
@@ -77,28 +88,57 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .status(WorkflowStatus.DRAFT)
                 .currentVersion(1)
                 .camundaProcessKey("process_" + request.code().toLowerCase())
+                .draftBpmnXml(normalizeXml(request.bpmnXml()))
+                .publishedVersionNumber(null)
                 .swimlanes(swimlanes)
                 .nodes(nodes)
                 .transitions(transitions)
                 .createdBy(createdBy)
+                .lastModifiedBy(createdBy)
                 .build();
 
         WorkflowDefinition saved = workflowDefinitionRepository.save(wf);
+        dynamicFormService.syncNodeBindings(saved.getId(), saved.getNodes());
+        saved = workflowDefinitionRepository.save(saved);
+        workflowAuditService.record(
+                saved,
+                WorkflowAuditAction.WORKFLOW_CREATED,
+                "Creacion inicial de la politica.",
+                createdBy,
+                null,
+                saved.getStatus(),
+                Map.of(
+                        "workflowCode", saved.getCode(),
+                        "workflowName", saved.getName()
+                )
+        );
         log.info("Workflow creado: {} por {}", saved.getCode(), createdBy);
         return toResponse(saved);
     }
 
     @Override
-    public WorkflowResponse update(String id, UpdateWorkflowRequest request) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
+    public WorkflowResponse update(String id, UpdateWorkflowRequest request, String updatedBy) {
+        WorkflowDefinition wf = workflowAccessService.requireWritable(id, updatedBy);
 
         if (wf.getStatus() != WorkflowStatus.DRAFT) {
             throw new IllegalStateException("Solo se pueden editar workflows en estado DRAFT.");
         }
 
+        WorkflowStatus statusBefore = wf.getStatus();
+
         if (request.name() != null) wf.setName(request.name());
         if (request.description() != null) wf.setDescription(request.description());
+        if (request.bpmnXml() != null) {
+            wf.setDraftBpmnXml(normalizeXml(request.bpmnXml()));
+            if (wf.getDraftBpmnXml() != null) {
+                BpmnMetadataExtractor.BpmnStructure structure = bpmnMetadataExtractor.extract(wf.getDraftBpmnXml());
+                dynamicFormService.validateNodeBindings(wf.getId(), structure.nodes());
+                wf.setSwimlanes(structure.swimlanes());
+                wf.setNodes(structure.nodes());
+                wf.setTransitions(structure.transitions());
+                dynamicFormService.syncNodeBindings(wf.getId(), wf.getNodes());
+            }
+        }
 
         if (request.swimlanes() != null) {
             wf.setSwimlanes(request.swimlanes().stream().map(s -> Swimlane.builder()
@@ -133,28 +173,54 @@ public class WorkflowServiceImpl implements WorkflowService {
             wf.setTransitions(transitions);
         }
 
-        if (wf.getNodes() != null && wf.getTransitions() != null) {
-            validateStructure(wf.getNodes(), wf.getTransitions());
-        }
+        validateDraftPayload(wf.getDraftBpmnXml(), wf.getNodes(), wf.getTransitions());
+        dynamicFormService.validateNodeBindings(wf.getId(), wf.getNodes());
 
+        wf.setLastModifiedBy(updatedBy);
         wf.setUpdatedAt(LocalDateTime.now());
-        return toResponse(workflowDefinitionRepository.save(wf));
+        dynamicFormService.syncNodeBindings(wf.getId(), wf.getNodes());
+        WorkflowDefinition saved = workflowDefinitionRepository.save(wf);
+        workflowAuditService.record(
+                saved,
+                WorkflowAuditAction.WORKFLOW_UPDATED,
+                "Actualizacion del borrador de la politica.",
+                updatedBy,
+                statusBefore,
+                saved.getStatus(),
+                Map.of(
+                        "workflowCode", saved.getCode(),
+                        "workflowName", saved.getName(),
+                        "hasBpmnXml", saved.getDraftBpmnXml() != null
+                )
+        );
+        return toResponse(saved);
     }
 
     @Override
     public WorkflowResponse publish(String id, String publishedBy) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
+        WorkflowDefinition wf = workflowAccessService.requireWritable(id, publishedBy);
 
-        validateStructure(wf.getNodes(), wf.getTransitions());
+        WorkflowStatus statusBefore = wf.getStatus();
 
-        String bpmnXml = generateBpmnXml(wf);
+        String bpmnXml = BpmnDeploymentPreparer.prepareForDeployment(
+                resolveBpmnXmlForPublish(wf),
+                wf.getCamundaProcessKey(),
+                wf.getName()
+        );
+        dynamicFormService.validateNodeBindings(wf.getId(), wf.getNodes());
+        int nextVersionNumber = resolveNextVersionNumber(wf.getId());
 
         try {
+            workflowVersionRepository.findByWorkflowDefinitionIdAndStatus(wf.getId(), WorkflowVersionStatus.PUBLISHED)
+                    .ifPresent(prev -> {
+                        prev.setStatus(WorkflowVersionStatus.DEPRECATED);
+                        workflowVersionRepository.save(prev);
+                    });
+
             Deployment deployment = repositoryService.createDeployment()
-                    .addInputStream(wf.getCamundaProcessKey() + ".bpmn",
+                    .addInputStream(wf.getCamundaProcessKey() + "_v" + nextVersionNumber + ".bpmn",
                             new ByteArrayInputStream(bpmnXml.getBytes(StandardCharsets.UTF_8)))
-                    .name(wf.getName())
+                    .name(wf.getName() + " v" + nextVersionNumber)
                     .deploy();
 
             String processDefinitionId = repositoryService.createProcessDefinitionQuery()
@@ -178,7 +244,7 @@ public class WorkflowServiceImpl implements WorkflowService {
 
             WorkflowVersion version = WorkflowVersion.builder()
                     .workflowDefinitionId(wf.getId())
-                    .versionNumber(wf.getCurrentVersion())
+                    .versionNumber(nextVersionNumber)
                     .bpmnXml(bpmnXml)
                     .status(WorkflowVersionStatus.PUBLISHED)
                     .camundaDeploymentId(deployment.getId())
@@ -196,35 +262,89 @@ public class WorkflowServiceImpl implements WorkflowService {
         }
 
         wf.setStatus(WorkflowStatus.PUBLISHED);
+        wf.setCurrentVersion(nextVersionNumber);
+        wf.setPublishedVersionNumber(nextVersionNumber);
+        wf.setDraftBpmnXml(bpmnXml);
+        wf.setLastModifiedBy(publishedBy);
         wf.setPublishedAt(LocalDateTime.now());
         wf.setUpdatedAt(LocalDateTime.now());
+        WorkflowDefinition saved = workflowDefinitionRepository.save(wf);
+        workflowAuditService.record(
+                saved,
+                WorkflowAuditAction.WORKFLOW_PUBLISHED,
+                "Publicacion de la politica en Camunda.",
+                publishedBy,
+                statusBefore,
+                saved.getStatus(),
+                Map.of(
+                        "workflowCode", saved.getCode(),
+                        "workflowName", saved.getName(),
+                        "versionNumber", nextVersionNumber,
+                        "camundaDeploymentId", saved.getCamundaDeploymentId(),
+                        "camundaProcessDefinitionId", saved.getCamundaProcessDefinitionId()
+                )
+        );
 
-        return toResponse(workflowDefinitionRepository.save(wf));
+        return toResponse(saved);
     }
 
     @Override
-    public void delete(String id) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
+    public void delete(String id, String deletedBy) {
+        WorkflowDefinition wf = workflowAccessService.requireWritable(id, deletedBy);
 
         if (wf.getStatus() != WorkflowStatus.DRAFT) {
             throw new IllegalStateException("Solo se pueden eliminar workflows en estado DRAFT.");
         }
 
+        workflowAuditService.record(
+                wf,
+                WorkflowAuditAction.WORKFLOW_DELETED,
+                "Eliminacion de la politica en borrador.",
+                deletedBy,
+                wf.getStatus(),
+                null,
+                Map.of(
+                        "workflowCode", wf.getCode(),
+                        "workflowName", wf.getName()
+                )
+        );
         workflowDefinitionRepository.delete(wf);
         log.info("Workflow eliminado: {}", wf.getCode());
     }
 
     @Override
-    public WorkflowResponse validate(String id) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
-
-        validateStructure(wf.getNodes(), wf.getTransitions());
+    public WorkflowResponse validate(String id, String username) {
+        WorkflowDefinition wf = workflowAccessService.requireReadable(id, username);
+        validateDraftPayload(wf.getDraftBpmnXml(), wf.getNodes(), wf.getTransitions());
         return toResponse(wf);
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private void validateDraftPayload(String bpmnXml, List<WorkflowNode> nodes, List<WorkflowTransition> transitions) {
+        if (bpmnXml != null && !bpmnXml.isBlank()) {
+            return;
+        }
+
+        validateStructure(nodes, transitions);
+    }
+
+    private String resolveBpmnXmlForPublish(WorkflowDefinition wf) {
+        if (wf.getDraftBpmnXml() != null && !wf.getDraftBpmnXml().isBlank()) {
+            return wf.getDraftBpmnXml();
+        }
+
+        validateStructure(wf.getNodes(), wf.getTransitions());
+        return generateBpmnXml(wf);
+    }
+
+    private int resolveNextVersionNumber(String workflowId) {
+        return workflowVersionRepository.findByWorkflowDefinitionIdOrderByVersionNumberDesc(workflowId)
+                .stream()
+                .findFirst()
+                .map(version -> version.getVersionNumber() + 1)
+                .orElse(1);
+    }
 
     private void validateStructure(List<WorkflowNode> nodes, List<WorkflowTransition> transitions) {
         if (nodes == null || nodes.isEmpty()) {
@@ -313,6 +433,15 @@ public class WorkflowServiceImpl implements WorkflowService {
                     .replace("'", "&apos;");
     }
 
+    private String normalizeXml(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
     private Swimlane mapSwimlane(CreateWorkflowRequest.SwimlaneRequest s) {
         return Swimlane.builder()
                 .id(s.id())
@@ -352,6 +481,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                 wf.getDescription(),
                 wf.getStatus(),
                 wf.getCurrentVersion(),
+                wf.getPublishedVersionNumber(),
                 wf.getCreatedAt(),
                 wf.getUpdatedAt()
         );
@@ -366,9 +496,13 @@ public class WorkflowServiceImpl implements WorkflowService {
                 wf.getStatus(),
                 wf.getCurrentVersion(),
                 wf.getCamundaProcessKey(),
+                wf.getDraftBpmnXml(),
+                wf.getPublishedVersionNumber(),
                 wf.getSwimlanes(),
                 wf.getNodes(),
                 wf.getTransitions(),
+                wf.getCreatedBy(),
+                wf.getLastModifiedBy(),
                 wf.getCreatedAt(),
                 wf.getUpdatedAt(),
                 wf.getPublishedAt()

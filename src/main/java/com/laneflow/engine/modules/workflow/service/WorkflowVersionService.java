@@ -7,9 +7,9 @@ import java.util.List;
 
 public interface WorkflowVersionService {
 
-    List<WorkflowVersionResponse> findByWorkflow(String workflowId);
+    List<WorkflowVersionResponse> findByWorkflow(String workflowId, String username);
 
-    WorkflowVersionResponse findByWorkflowAndVersion(String workflowId, int versionNumber);
+    WorkflowVersionResponse findByWorkflowAndVersion(String workflowId, int versionNumber, String username);
 
     WorkflowVersionResponse createDraft(String workflowId, CreateVersionRequest request, String createdBy);
 
