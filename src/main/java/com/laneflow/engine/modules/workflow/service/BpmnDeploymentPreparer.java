@@ -10,6 +10,7 @@ final class BpmnDeploymentPreparer {
     private static final Pattern PROCESS_NAME_ATTRIBUTE = Pattern.compile("\\sname\\s*=\\s*\"[^\"]*\"");
     private static final Pattern PROCESS_EXECUTABLE_ATTRIBUTE = Pattern.compile("\\sisExecutable\\s*=\\s*\"[^\"]*\"");
     private static final Pattern PROCESS_HISTORY_TTL_ATTRIBUTE = Pattern.compile("\\scamunda:historyTimeToLive\\s*=\\s*\"[^\"]*\"");
+    private static final Pattern PROCESS_REF_ATTRIBUTE_TEMPLATE = Pattern.compile("\\sprocessRef\\s*=\\s*\"%s\"");
 
     private BpmnDeploymentPreparer() {
     }
@@ -33,14 +34,25 @@ final class BpmnDeploymentPreparer {
         }
 
         String processTag = prepared.substring(processStart, processEnd + 1);
+        String originalProcessId = extractAttributeValue(processTag, "id");
         String updatedProcessTag = upsertAttribute(processTag, PROCESS_ID_ATTRIBUTE, "id", processKey);
         updatedProcessTag = upsertAttribute(updatedProcessTag, PROCESS_NAME_ATTRIBUTE, "name", processName);
         updatedProcessTag = upsertAttribute(updatedProcessTag, PROCESS_EXECUTABLE_ATTRIBUTE, "isExecutable", "true");
         updatedProcessTag = upsertAttribute(updatedProcessTag, PROCESS_HISTORY_TTL_ATTRIBUTE, "camunda:historyTimeToLive", "180");
 
-        return prepared.substring(0, processStart)
+        prepared = prepared.substring(0, processStart)
                 + updatedProcessTag
                 + prepared.substring(processEnd + 1);
+
+        if (originalProcessId != null && !originalProcessId.equals(processKey)) {
+            Pattern participantProcessRefPattern = Pattern.compile(
+                    String.format(PROCESS_REF_ATTRIBUTE_TEMPLATE.pattern(), Pattern.quote(originalProcessId))
+            );
+            prepared = participantProcessRefPattern.matcher(prepared)
+                    .replaceFirst(" processRef=\"" + escapeAttribute(processKey) + "\"");
+        }
+
+        return prepared;
     }
 
     private static int findProcessStart(String xml) {
@@ -54,6 +66,12 @@ final class BpmnDeploymentPreparer {
             return matcher.replaceFirst(" " + attributeName + "=\"" + escapeAttribute(value) + "\"");
         }
         return tag.substring(0, tag.length() - 1) + " " + attributeName + "=\"" + escapeAttribute(value) + "\">";
+    }
+
+    private static String extractAttributeValue(String tag, String attributeName) {
+        Pattern pattern = Pattern.compile("\\s" + Pattern.quote(attributeName) + "\\s*=\\s*\"([^\"]*)\"");
+        var matcher = pattern.matcher(tag);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     private static String escapeAttribute(String value) {
