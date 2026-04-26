@@ -26,8 +26,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +36,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     private final WorkflowVersionRepository workflowVersionRepository;
     private final RepositoryService repositoryService;
     private final BpmnMetadataExtractor bpmnMetadataExtractor;
+    private final WorkflowModelValidator workflowModelValidator;
     private final WorkflowAuditService workflowAuditService;
     private final DynamicFormService dynamicFormService;
     private final WorkflowAccessService workflowAccessService;
@@ -59,7 +58,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     @Override
     public WorkflowResponse create(CreateWorkflowRequest request, String createdBy) {
         if (workflowDefinitionRepository.existsByCode(request.code())) {
-            throw new IllegalArgumentException("Ya existe un workflow con el código: " + request.code());
+            throw new IllegalArgumentException("Ya existe un workflow con el codigo: " + request.code());
         }
 
         List<WorkflowNode> nodes = request.nodes() != null
@@ -79,7 +78,7 @@ public class WorkflowServiceImpl implements WorkflowService {
             transitions = structure.transitions();
         }
 
-        validateDraftPayload(request.bpmnXml(), nodes, transitions);
+        workflowModelValidator.validateDraft(request.bpmnXml(), swimlanes, nodes, transitions);
 
         WorkflowDefinition wf = WorkflowDefinition.builder()
                 .code(request.code().toUpperCase())
@@ -126,12 +125,17 @@ public class WorkflowServiceImpl implements WorkflowService {
 
         WorkflowStatus statusBefore = wf.getStatus();
 
-        if (request.name() != null) wf.setName(request.name());
-        if (request.description() != null) wf.setDescription(request.description());
+        if (request.name() != null) {
+            wf.setName(request.name());
+        }
+        if (request.description() != null) {
+            wf.setDescription(request.description());
+        }
         if (request.bpmnXml() != null) {
             wf.setDraftBpmnXml(normalizeXml(request.bpmnXml()));
             if (wf.getDraftBpmnXml() != null) {
                 BpmnMetadataExtractor.BpmnStructure structure = bpmnMetadataExtractor.extract(wf.getDraftBpmnXml());
+                workflowModelValidator.validateDraft(wf.getDraftBpmnXml(), structure.swimlanes(), structure.nodes(), structure.transitions());
                 dynamicFormService.validateNodeBindings(wf.getId(), structure.nodes());
                 wf.setSwimlanes(structure.swimlanes());
                 wf.setNodes(structure.nodes());
@@ -173,7 +177,7 @@ public class WorkflowServiceImpl implements WorkflowService {
             wf.setTransitions(transitions);
         }
 
-        validateDraftPayload(wf.getDraftBpmnXml(), wf.getNodes(), wf.getTransitions());
+        workflowModelValidator.validateDraft(wf.getDraftBpmnXml(), wf.getSwimlanes(), wf.getNodes(), wf.getTransitions());
         dynamicFormService.validateNodeBindings(wf.getId(), wf.getNodes());
 
         wf.setLastModifiedBy(updatedBy);
@@ -199,7 +203,6 @@ public class WorkflowServiceImpl implements WorkflowService {
     @Override
     public WorkflowResponse publish(String id, String publishedBy) {
         WorkflowDefinition wf = workflowAccessService.requireWritable(id, publishedBy);
-
         WorkflowStatus statusBefore = wf.getStatus();
 
         String bpmnXml = BpmnDeploymentPreparer.prepareForDeployment(
@@ -207,6 +210,18 @@ public class WorkflowServiceImpl implements WorkflowService {
                 wf.getCamundaProcessKey(),
                 wf.getName()
         );
+        BpmnMetadataExtractor.BpmnStructure publishStructure = bpmnMetadataExtractor.extract(bpmnXml);
+        workflowModelValidator.validatePublishable(
+                wf.getCode(),
+                wf.getName(),
+                publishStructure.swimlanes(),
+                publishStructure.nodes(),
+                publishStructure.transitions()
+        );
+        wf.setSwimlanes(publishStructure.swimlanes());
+        wf.setNodes(publishStructure.nodes());
+        wf.setTransitions(publishStructure.transitions());
+        dynamicFormService.syncNodeBindings(wf.getId(), wf.getNodes());
         dynamicFormService.validateNodeBindings(wf.getId(), wf.getNodes());
         int nextVersionNumber = resolveNextVersionNumber(wf.getId());
 
@@ -223,9 +238,8 @@ public class WorkflowServiceImpl implements WorkflowService {
                     .name(wf.getName() + " v" + nextVersionNumber)
                     .deploy();
 
-            String processDefinitionId = repositoryService.createProcessDefinitionQuery()
-                    .deploymentId(deployment.getId())
-                    .singleResult()
+            String processDefinitionId = CamundaDeploymentSupport
+                    .resolveProcessDefinition(repositoryService, deployment, wf.getCamundaProcessKey())
                     .getId();
 
             wf.setCamundaDeploymentId(deployment.getId());
@@ -233,7 +247,6 @@ public class WorkflowServiceImpl implements WorkflowService {
 
             log.info("Workflow {} desplegado en Camunda. DeploymentId: {}", wf.getCode(), deployment.getId());
 
-            // Save version snapshot
             Map<String, Object> snapshot = Map.of(
                     "code", wf.getCode(),
                     "name", wf.getName(),
@@ -255,9 +268,8 @@ public class WorkflowServiceImpl implements WorkflowService {
                     .build();
 
             workflowVersionRepository.save(version);
-
         } catch (Exception e) {
-            log.error("Error al desplegar workflow {} en Camunda: {}", wf.getCode(), e.getMessage());
+            log.error("Error al desplegar workflow {} en Camunda: {}", wf.getCode(), e.getMessage(), e);
             throw new IllegalStateException("Error al desplegar el workflow en Camunda: " + e.getMessage(), e);
         }
 
@@ -315,18 +327,8 @@ public class WorkflowServiceImpl implements WorkflowService {
     @Override
     public WorkflowResponse validate(String id, String username) {
         WorkflowDefinition wf = workflowAccessService.requireReadable(id, username);
-        validateDraftPayload(wf.getDraftBpmnXml(), wf.getNodes(), wf.getTransitions());
+        workflowModelValidator.validateDraft(wf.getDraftBpmnXml(), wf.getSwimlanes(), wf.getNodes(), wf.getTransitions());
         return toResponse(wf);
-    }
-
-    // ------------------------------------------------------------------ helpers
-
-    private void validateDraftPayload(String bpmnXml, List<WorkflowNode> nodes, List<WorkflowTransition> transitions) {
-        if (bpmnXml != null && !bpmnXml.isBlank()) {
-            return;
-        }
-
-        validateStructure(nodes, transitions);
     }
 
     private String resolveBpmnXmlForPublish(WorkflowDefinition wf) {
@@ -334,7 +336,7 @@ public class WorkflowServiceImpl implements WorkflowService {
             return wf.getDraftBpmnXml();
         }
 
-        validateStructure(wf.getNodes(), wf.getTransitions());
+        workflowModelValidator.validatePublishable(wf);
         return generateBpmnXml(wf);
     }
 
@@ -344,28 +346,6 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .findFirst()
                 .map(version -> version.getVersionNumber() + 1)
                 .orElse(1);
-    }
-
-    private void validateStructure(List<WorkflowNode> nodes, List<WorkflowTransition> transitions) {
-        if (nodes == null || nodes.isEmpty()) {
-            throw new IllegalArgumentException("El flujo debe tener al menos un nodo.");
-        }
-
-        boolean hasStart = nodes.stream().anyMatch(n -> n.getType() == NodeType.START_EVENT);
-        boolean hasEnd = nodes.stream().anyMatch(n -> n.getType() == NodeType.END_EVENT);
-
-        if (!hasStart) throw new IllegalArgumentException("El flujo debe tener al menos un nodo de inicio (START_EVENT).");
-        if (!hasEnd) throw new IllegalArgumentException("El flujo debe tener al menos un nodo de fin (END_EVENT).");
-
-        if (transitions != null) {
-            Set<String> nodeIds = nodes.stream().map(WorkflowNode::getId).collect(Collectors.toSet());
-            for (WorkflowTransition t : transitions) {
-                if (!nodeIds.contains(t.getSourceNodeId()))
-                    throw new IllegalArgumentException("Transición con nodo fuente inválido: " + t.getSourceNodeId());
-                if (!nodeIds.contains(t.getTargetNodeId()))
-                    throw new IllegalArgumentException("Transición con nodo destino inválido: " + t.getTargetNodeId());
-            }
-        }
     }
 
     private String generateBpmnXml(WorkflowDefinition wf) {
@@ -378,16 +358,16 @@ public class WorkflowServiceImpl implements WorkflowService {
         sb.append("  <process id=\"").append(wf.getCamundaProcessKey()).append("\"");
         sb.append(" name=\"").append(escapeXml(wf.getName())).append("\"");
         sb.append(" isExecutable=\"true\"");
-        sb.append(" camunda:historyTimeToLive=\"P180D\">\n");
+        sb.append(" camunda:historyTimeToLive=\"180\">\n");
 
         for (WorkflowNode node : wf.getNodes()) {
             String id = node.getId();
             String name = escapeXml(node.getName());
             switch (node.getType()) {
                 case START_EVENT ->
-                    sb.append("    <startEvent id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                        sb.append("    <startEvent id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
                 case END_EVENT ->
-                    sb.append("    <endEvent id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                        sb.append("    <endEvent id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
                 case USER_TASK -> {
                     sb.append("    <userTask id=\"").append(id).append("\" name=\"").append(name).append("\"");
                     if (node.getDepartmentId() != null && !node.getDepartmentId().isBlank()) {
@@ -396,24 +376,24 @@ public class WorkflowServiceImpl implements WorkflowService {
                     sb.append("/>\n");
                 }
                 case EXCLUSIVE_GATEWAY ->
-                    sb.append("    <exclusiveGateway id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                        sb.append("    <exclusiveGateway id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
                 case PARALLEL_GATEWAY ->
-                    sb.append("    <parallelGateway id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                        sb.append("    <parallelGateway id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
                 case INCLUSIVE_GATEWAY ->
-                    sb.append("    <inclusiveGateway id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                        sb.append("    <inclusiveGateway id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
                 default ->
-                    sb.append("    <task id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                        sb.append("    <task id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
             }
         }
 
-        for (WorkflowTransition t : wf.getTransitions()) {
-            sb.append("    <sequenceFlow id=\"").append(t.getId())
-              .append("\" sourceRef=\"").append(t.getSourceNodeId())
-              .append("\" targetRef=\"").append(t.getTargetNodeId()).append("\"");
-            if (t.getCondition() != null && !t.getCondition().isBlank()) {
+        for (WorkflowTransition transition : wf.getTransitions()) {
+            sb.append("    <sequenceFlow id=\"").append(transition.getId())
+                    .append("\" sourceRef=\"").append(transition.getSourceNodeId())
+                    .append("\" targetRef=\"").append(transition.getTargetNodeId()).append("\"");
+            if (transition.getCondition() != null && !transition.getCondition().isBlank()) {
                 sb.append(">\n      <conditionExpression xsi:type=\"tFormalExpression\">")
-                  .append(escapeXml(t.getCondition()))
-                  .append("</conditionExpression>\n    </sequenceFlow>\n");
+                        .append(escapeXml(transition.getCondition()))
+                        .append("</conditionExpression>\n    </sequenceFlow>\n");
             } else {
                 sb.append("/>\n");
             }
@@ -425,12 +405,14 @@ public class WorkflowServiceImpl implements WorkflowService {
     }
 
     private String escapeXml(String value) {
-        if (value == null) return "";
+        if (value == null) {
+            return "";
+        }
         return value.replace("&", "&amp;")
-                    .replace("<", "&lt;")
-                    .replace(">", "&gt;")
-                    .replace("\"", "&quot;")
-                    .replace("'", "&apos;");
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 
     private String normalizeXml(String value) {
@@ -442,34 +424,34 @@ public class WorkflowServiceImpl implements WorkflowService {
         return normalized.isEmpty() ? null : normalized;
     }
 
-    private Swimlane mapSwimlane(CreateWorkflowRequest.SwimlaneRequest s) {
+    private Swimlane mapSwimlane(CreateWorkflowRequest.SwimlaneRequest swimlane) {
         return Swimlane.builder()
-                .id(s.id())
-                .name(s.name())
-                .departmentId(s.departmentId())
-                .departmentCode(s.departmentCode())
+                .id(swimlane.id())
+                .name(swimlane.name())
+                .departmentId(swimlane.departmentId())
+                .departmentCode(swimlane.departmentCode())
                 .build();
     }
 
-    private WorkflowNode mapNode(CreateWorkflowRequest.NodeRequest n) {
+    private WorkflowNode mapNode(CreateWorkflowRequest.NodeRequest node) {
         return WorkflowNode.builder()
-                .id(n.id())
-                .name(n.name())
-                .type(n.type())
-                .swimlaneId(n.swimlaneId())
-                .departmentId(n.departmentId())
-                .formKey(n.formKey())
-                .requiredAction(n.requiredAction())
+                .id(node.id())
+                .name(node.name())
+                .type(node.type())
+                .swimlaneId(node.swimlaneId())
+                .departmentId(node.departmentId())
+                .formKey(node.formKey())
+                .requiredAction(node.requiredAction())
                 .build();
     }
 
-    private WorkflowTransition mapTransition(CreateWorkflowRequest.TransitionRequest t) {
+    private WorkflowTransition mapTransition(CreateWorkflowRequest.TransitionRequest transition) {
         return WorkflowTransition.builder()
-                .id(t.id())
-                .sourceNodeId(t.sourceNodeId())
-                .targetNodeId(t.targetNodeId())
-                .condition(t.condition())
-                .label(t.label())
+                .id(transition.id())
+                .sourceNodeId(transition.sourceNodeId())
+                .targetNodeId(transition.targetNodeId())
+                .condition(transition.condition())
+                .label(transition.label())
                 .build();
     }
 

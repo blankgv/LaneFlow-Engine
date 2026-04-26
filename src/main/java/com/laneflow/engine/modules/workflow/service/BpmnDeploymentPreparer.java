@@ -8,6 +8,8 @@ final class BpmnDeploymentPreparer {
     private static final Pattern PROCESS_TAG = Pattern.compile("<([\\w.-]+:)?process\\b");
     private static final Pattern PROCESS_ID_ATTRIBUTE = Pattern.compile("\\sid\\s*=\\s*\"[^\"]*\"");
     private static final Pattern PROCESS_NAME_ATTRIBUTE = Pattern.compile("\\sname\\s*=\\s*\"[^\"]*\"");
+    private static final Pattern PROCESS_EXECUTABLE_ATTRIBUTE = Pattern.compile("\\sisExecutable\\s*=\\s*\"[^\"]*\"");
+    private static final Pattern PROCESS_HISTORY_TTL_ATTRIBUTE = Pattern.compile("\\scamunda:historyTimeToLive\\s*=\\s*\"[^\"]*\"");
 
     private BpmnDeploymentPreparer() {
     }
@@ -33,11 +35,8 @@ final class BpmnDeploymentPreparer {
         String processTag = prepared.substring(processStart, processEnd + 1);
         String updatedProcessTag = upsertAttribute(processTag, PROCESS_ID_ATTRIBUTE, "id", processKey);
         updatedProcessTag = upsertAttribute(updatedProcessTag, PROCESS_NAME_ATTRIBUTE, "name", processName);
-
-        if (!updatedProcessTag.contains("camunda:historyTimeToLive=")) {
-            updatedProcessTag = updatedProcessTag.substring(0, updatedProcessTag.length() - 1)
-                    + " camunda:historyTimeToLive=\"180\">";
-        }
+        updatedProcessTag = upsertAttribute(updatedProcessTag, PROCESS_EXECUTABLE_ATTRIBUTE, "isExecutable", "true");
+        updatedProcessTag = upsertAttribute(updatedProcessTag, PROCESS_HISTORY_TTL_ATTRIBUTE, "camunda:historyTimeToLive", "180");
 
         return prepared.substring(0, processStart)
                 + updatedProcessTag
