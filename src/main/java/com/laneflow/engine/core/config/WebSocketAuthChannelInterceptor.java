@@ -25,6 +25,11 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
+            if (accessor.getUser() != null && accessor.getUser().getName() != null
+                    && !accessor.getUser().getName().isBlank()) {
+                return message;
+            }
+
             String token = resolveBearerToken(accessor.getNativeHeader("Authorization"));
             if (token == null || !jwtService.isTokenValid(token)) {
                 throw new IllegalStateException("La conexion WebSocket requiere un token valido.");

@@ -1,5 +1,6 @@
 package com.laneflow.engine.core.config;
 
+import com.laneflow.engine.core.common.ApiVersion;
 import com.laneflow.engine.core.security.JwtAuthFilter;
 import com.laneflow.engine.core.security.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +39,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 antMatcher("/api/v1/auth/**"),
                                 antMatcher("/ws/**"),
+                                antMatcher(ApiVersion.V1 + "/ws/**"),
                                 antMatcher("/docs/**"),
                                 antMatcher("/docs.html"),
                                 antMatcher("/api-docs/**"),

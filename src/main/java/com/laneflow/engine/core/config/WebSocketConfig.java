@@ -1,5 +1,6 @@
 package com.laneflow.engine.core.config;
 
+import com.laneflow.engine.core.common.ApiVersion;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -54,7 +55,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        var registration = registry.addEndpoint("/ws");
+        registerEndpoint(registry, "/ws");
+        registerEndpoint(registry, ApiVersion.V1 + "/ws");
+    }
+
+    private void registerEndpoint(StompEndpointRegistry registry, String path) {
+        var registration = registry.addEndpoint(path);
 
         if (!allowedOrigins.isEmpty()) {
             registration.setAllowedOrigins(allowedOrigins.toArray(String[]::new));
