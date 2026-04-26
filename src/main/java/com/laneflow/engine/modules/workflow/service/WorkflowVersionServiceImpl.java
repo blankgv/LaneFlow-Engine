@@ -29,6 +29,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
     private final RepositoryService repositoryService;
     private final BpmnMetadataExtractor bpmnMetadataExtractor;
+    private final WorkflowModelValidator workflowModelValidator;
     private final WorkflowAuditService workflowAuditService;
     private final DynamicFormService dynamicFormService;
     private final WorkflowAccessService workflowAccessService;
@@ -48,7 +49,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
         WorkflowVersion version = workflowVersionRepository
                 .findByWorkflowDefinitionIdAndVersionNumber(workflowId, versionNumber)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Versión " + versionNumber + " no encontrada para el workflow: " + workflowId));
+                        "Version " + versionNumber + " no encontrada para el workflow: " + workflowId));
         return toResponse(version);
     }
 
@@ -72,6 +73,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
         if (request.bpmnXml() != null && !request.bpmnXml().isBlank()) {
             wf.setDraftBpmnXml(request.bpmnXml().trim());
             BpmnMetadataExtractor.BpmnStructure structure = bpmnMetadataExtractor.extract(wf.getDraftBpmnXml());
+            workflowModelValidator.validateDraft(wf.getDraftBpmnXml(), structure.swimlanes(), structure.nodes(), structure.transitions());
             dynamicFormService.validateNodeBindings(wf.getId(), structure.nodes());
             wf.setSwimlanes(structure.swimlanes());
             wf.setNodes(structure.nodes());
@@ -108,19 +110,18 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
         WorkflowVersion version = workflowVersionRepository
                 .findByWorkflowDefinitionIdAndVersionNumber(workflowId, versionNumber)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Versión " + versionNumber + " no encontrada para el workflow: " + workflowId));
+                        "Version " + versionNumber + " no encontrada para el workflow: " + workflowId));
 
         if (version.getStatus() == WorkflowVersionStatus.PUBLISHED) {
-            throw new IllegalStateException("La versión ya está publicada.");
+            throw new IllegalStateException("La version ya esta publicada.");
         }
 
         if (version.getBpmnXml() == null || version.getBpmnXml().isBlank()) {
-            throw new IllegalStateException("La versión no tiene BPMN XML para publicar.");
+            throw new IllegalStateException("La version no tiene BPMN XML para publicar.");
         }
 
         dynamicFormService.validateNodeBindings(wf.getId(), wf.getNodes());
 
-        // Deprecate any existing PUBLISHED version
         workflowVersionRepository.findByWorkflowDefinitionIdAndStatus(workflowId, WorkflowVersionStatus.PUBLISHED)
                 .ifPresent(prev -> {
                     prev.setStatus(WorkflowVersionStatus.DEPRECATED);
@@ -132,6 +133,18 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
                 wf.getCamundaProcessKey(),
                 wf.getName()
         );
+        BpmnMetadataExtractor.BpmnStructure publishStructure = bpmnMetadataExtractor.extract(bpmnXml);
+        workflowModelValidator.validatePublishable(
+                wf.getCode(),
+                wf.getName(),
+                publishStructure.swimlanes(),
+                publishStructure.nodes(),
+                publishStructure.transitions()
+        );
+        wf.setSwimlanes(publishStructure.swimlanes());
+        wf.setNodes(publishStructure.nodes());
+        wf.setTransitions(publishStructure.transitions());
+        dynamicFormService.syncNodeBindings(wf.getId(), wf.getNodes());
 
         try {
             Deployment deployment = repositoryService.createDeployment()
@@ -140,9 +153,8 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
                     .name(wf.getName() + " v" + versionNumber)
                     .deploy();
 
-            String processDefinitionId = repositoryService.createProcessDefinitionQuery()
-                    .deploymentId(deployment.getId())
-                    .singleResult()
+            String processDefinitionId = CamundaDeploymentSupport
+                    .resolveProcessDefinition(repositoryService, deployment, wf.getCamundaProcessKey())
                     .getId();
 
             version.setCamundaDeploymentId(deployment.getId());
@@ -162,7 +174,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
             log.info("Version {} del workflow {} desplegada en Camunda. DeploymentId: {}",
                     versionNumber, wf.getCode(), deployment.getId());
         } catch (Exception e) {
-            log.error("Error al desplegar versión {} del workflow {}: {}", versionNumber, wf.getCode(), e.getMessage());
+            log.error("Error al desplegar version {} del workflow {}: {}", versionNumber, wf.getCode(), e.getMessage(), e);
             throw new IllegalStateException("Error al desplegar en Camunda: " + e.getMessage(), e);
         }
 
@@ -188,16 +200,16 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
         return toResponse(workflowVersionRepository.save(version));
     }
 
-    private WorkflowVersionResponse toResponse(WorkflowVersion v) {
+    private WorkflowVersionResponse toResponse(WorkflowVersion version) {
         return new WorkflowVersionResponse(
-                v.getId(),
-                v.getWorkflowDefinitionId(),
-                v.getVersionNumber(),
-                v.getBpmnXml(),
-                v.getStatus(),
-                v.getCamundaDeploymentId(),
-                v.getCreatedAt(),
-                v.getPublishedAt()
+                version.getId(),
+                version.getWorkflowDefinitionId(),
+                version.getVersionNumber(),
+                version.getBpmnXml(),
+                version.getStatus(),
+                version.getCamundaDeploymentId(),
+                version.getCreatedAt(),
+                version.getPublishedAt()
         );
     }
 }
