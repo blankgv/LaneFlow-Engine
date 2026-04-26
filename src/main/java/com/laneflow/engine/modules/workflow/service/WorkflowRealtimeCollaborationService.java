@@ -7,11 +7,11 @@ import com.laneflow.engine.modules.workflow.response.WorkflowDraftSyncResponse;
 
 public interface WorkflowRealtimeCollaborationService {
 
-    WorkflowCollaborationPresenceResponse join(String workflowId, String sessionId, WorkflowCollaborationPresenceRequest request);
+    WorkflowCollaborationPresenceResponse join(String workflowId, String sessionId, String username, WorkflowCollaborationPresenceRequest request);
 
-    WorkflowCollaborationPresenceResponse leave(String workflowId, String sessionId, WorkflowCollaborationPresenceRequest request);
+    WorkflowCollaborationPresenceResponse leave(String workflowId, String sessionId, String username, WorkflowCollaborationPresenceRequest request);
 
-    WorkflowDraftSyncResponse saveDraft(String workflowId, WorkflowDraftSyncRequest request);
+    WorkflowDraftSyncResponse saveDraft(String workflowId, String username, WorkflowDraftSyncRequest request);
 
     void handleDisconnect(String sessionId);
 }

@@ -1,16 +1,10 @@
 package com.laneflow.engine.modules.workflow.service;
 
-import com.laneflow.engine.modules.admin.model.User;
-import com.laneflow.engine.modules.admin.repository.UserRepository;
-import com.laneflow.engine.modules.workflow.model.WorkflowCollaborator;
 import com.laneflow.engine.modules.workflow.model.WorkflowDefinition;
 import com.laneflow.engine.modules.workflow.model.enums.WorkflowStatus;
-import com.laneflow.engine.modules.workflow.repository.WorkflowCollaboratorRepository;
-import com.laneflow.engine.modules.workflow.repository.WorkflowDefinitionRepository;
 import com.laneflow.engine.modules.workflow.request.WorkflowCollaborationPresenceRequest;
 import com.laneflow.engine.modules.workflow.request.WorkflowDraftSyncRequest;
 import com.laneflow.engine.modules.workflow.response.WorkflowCollaborationPresenceResponse;
-import com.laneflow.engine.modules.workflow.response.WorkflowResponse;
 import com.laneflow.engine.modules.workflow.response.WorkflowDraftSyncResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,9 +23,7 @@ import java.util.concurrent.ConcurrentMap;
 @Slf4j
 public class WorkflowRealtimeCollaborationServiceImpl implements WorkflowRealtimeCollaborationService {
 
-    private final WorkflowDefinitionRepository workflowDefinitionRepository;
-    private final WorkflowCollaboratorRepository workflowCollaboratorRepository;
-    private final UserRepository userRepository;
+    private final WorkflowAccessService workflowAccessService;
     private final WorkflowService workflowService;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -41,42 +33,44 @@ public class WorkflowRealtimeCollaborationServiceImpl implements WorkflowRealtim
     @Override
     public WorkflowCollaborationPresenceResponse join(String workflowId,
                                                      String sessionId,
+                                                     String username,
                                                      WorkflowCollaborationPresenceRequest request) {
-        WorkflowDefinition workflow = requireEditableAccess(workflowId, request.username());
+        WorkflowDefinition workflow = requireEditableAccess(workflowId, username);
         activeUsersByWorkflow.computeIfAbsent(workflowId, ignored -> ConcurrentHashMap.newKeySet())
-                .add(request.username());
-        sessionPresenceBySessionId.put(sessionId, new SessionPresence(workflowId, request.username()));
+                .add(username);
+        sessionPresenceBySessionId.put(sessionId, new SessionPresence(workflowId, username));
 
         WorkflowCollaborationPresenceResponse response = buildPresenceResponse(
                 workflowId,
                 "JOINED",
-                request.username()
+                username
         );
         messagingTemplate.convertAndSend("/topic/workflows/" + workflowId + "/presence", response);
-        log.info("Usuario {} se unio a la colaboracion en workflow {}", request.username(), workflow.getCode());
+        log.info("Usuario {} se unio a la colaboracion en workflow {}", username, workflow.getCode());
         return response;
     }
 
     @Override
     public WorkflowCollaborationPresenceResponse leave(String workflowId,
                                                       String sessionId,
+                                                      String username,
                                                       WorkflowCollaborationPresenceRequest request) {
-        requireWorkflowAccess(workflowId, request.username());
-        removePresence(workflowId, request.username(), sessionId);
+        requireWorkflowAccess(workflowId, username);
+        removePresence(workflowId, username, sessionId);
         WorkflowCollaborationPresenceResponse response = buildPresenceResponse(
                 workflowId,
                 "LEFT",
-                request.username()
+                username
         );
         messagingTemplate.convertAndSend("/topic/workflows/" + workflowId + "/presence", response);
         return response;
     }
 
     @Override
-    public WorkflowDraftSyncResponse saveDraft(String workflowId, WorkflowDraftSyncRequest request) {
-        requireEditableAccess(workflowId, request.username());
+    public WorkflowDraftSyncResponse saveDraft(String workflowId, String username, WorkflowDraftSyncRequest request) {
+        requireEditableAccess(workflowId, username);
 
-        WorkflowResponse updated = workflowService.update(
+        var updated = workflowService.update(
                 workflowId,
                 new com.laneflow.engine.modules.workflow.request.UpdateWorkflowRequest(
                         null,
@@ -86,7 +80,7 @@ public class WorkflowRealtimeCollaborationServiceImpl implements WorkflowRealtim
                         null,
                         null
                 ),
-                request.username()
+                username
         );
 
         WorkflowDraftSyncResponse response = new WorkflowDraftSyncResponse(
@@ -125,23 +119,7 @@ public class WorkflowRealtimeCollaborationServiceImpl implements WorkflowRealtim
     }
 
     private WorkflowDefinition requireWorkflowAccess(String workflowId, String username) {
-        WorkflowDefinition workflow = workflowDefinitionRepository.findById(workflowId)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + workflowId));
-
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + username));
-
-        boolean isOwner = username.equals(workflow.getCreatedBy());
-        boolean isCollaborator = workflowCollaboratorRepository
-                .findByWorkflowDefinitionIdAndUserId(workflowId, user.getId())
-                .map(WorkflowCollaborator::getId)
-                .isPresent();
-
-        if (!isOwner && !isCollaborator) {
-            throw new IllegalStateException("El usuario no tiene acceso colaborativo a esta politica.");
-        }
-
-        return workflow;
+        return workflowAccessService.requireWritable(workflowId, username);
     }
 
     private void removePresence(String workflowId, String username, String sessionId) {

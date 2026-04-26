@@ -12,6 +12,8 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
 
+import java.security.Principal;
+
 @Controller
 @RequiredArgsConstructor
 public class WorkflowRealtimeCollaborationController {
@@ -21,20 +23,30 @@ public class WorkflowRealtimeCollaborationController {
     @MessageMapping("/workflows/{workflowId}/presence.join")
     public WorkflowCollaborationPresenceResponse join(@DestinationVariable String workflowId,
                                                       @Header("simpSessionId") String sessionId,
+                                                      Principal principal,
                                                       @Payload WorkflowCollaborationPresenceRequest request) {
-        return workflowRealtimeCollaborationService.join(workflowId, sessionId, request);
+        return workflowRealtimeCollaborationService.join(workflowId, sessionId, requireUsername(principal), request);
     }
 
     @MessageMapping("/workflows/{workflowId}/presence.leave")
     public WorkflowCollaborationPresenceResponse leave(@DestinationVariable String workflowId,
                                                        @Header("simpSessionId") String sessionId,
+                                                       Principal principal,
                                                        @Payload WorkflowCollaborationPresenceRequest request) {
-        return workflowRealtimeCollaborationService.leave(workflowId, sessionId, request);
+        return workflowRealtimeCollaborationService.leave(workflowId, sessionId, requireUsername(principal), request);
     }
 
     @MessageMapping("/workflows/{workflowId}/draft.save")
     public WorkflowDraftSyncResponse saveDraft(@DestinationVariable String workflowId,
+                                               Principal principal,
                                                @Payload WorkflowDraftSyncRequest request) {
-        return workflowRealtimeCollaborationService.saveDraft(workflowId, request);
+        return workflowRealtimeCollaborationService.saveDraft(workflowId, requireUsername(principal), request);
+    }
+
+    private String requireUsername(Principal principal) {
+        if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
+            throw new IllegalStateException("La sesion WebSocket no esta autenticada.");
+        }
+        return principal.getName();
     }
 }
