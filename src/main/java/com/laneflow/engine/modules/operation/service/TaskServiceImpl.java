@@ -53,6 +53,7 @@ public class TaskServiceImpl implements TaskService {
     private final ProcedureAuditService procedureAuditService;
     private final ProcedureNotificationService procedureNotificationService;
     private final DynamicFormService dynamicFormService;
+    private final TaskFormSubmissionValidator taskFormSubmissionValidator;
 
     @Override
     public List<TaskResponse> getAvailable(String username) {
@@ -171,6 +172,7 @@ public class TaskServiceImpl implements TaskService {
         if (request.formData() != null) {
             mergedFormData.putAll(request.formData());
         }
+        taskFormSubmissionValidator.validate(procedure, task, request.formData(), mergedFormData);
 
         Map<String, Object> variables = new HashMap<>();
         variables.putAll(mergedFormData);

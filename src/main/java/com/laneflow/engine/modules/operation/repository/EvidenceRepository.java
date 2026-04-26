@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface EvidenceRepository extends MongoRepository<Evidence, String> {
     List<Evidence> findByProcedureIdOrderByCreatedAtDesc(String procedureId);
+    List<Evidence> findByProcedureIdAndTaskIdAndNodeIdOrderByCreatedAtDesc(String procedureId, String taskId, String nodeId);
 }
