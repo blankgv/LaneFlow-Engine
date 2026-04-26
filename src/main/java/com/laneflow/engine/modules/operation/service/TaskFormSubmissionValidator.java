@@ -41,8 +41,16 @@ public class TaskFormSubmissionValidator {
                          Task task,
                          Map<String, Object> submittedData,
                          Map<String, Object> mergedData) {
+        validate(procedure, task.getId(), task.getTaskDefinitionKey(), submittedData, mergedData);
+    }
+
+    public void validate(Procedure procedure,
+                         String taskId,
+                         String nodeId,
+                         Map<String, Object> submittedData,
+                         Map<String, Object> mergedData) {
         DynamicFormResponse form = dynamicFormService
-                .findOptionalByWorkflowAndNode(procedure.getWorkflowDefinitionId(), task.getTaskDefinitionKey())
+                .findOptionalByWorkflowAndNode(procedure.getWorkflowDefinitionId(), nodeId)
                 .orElse(null);
 
         if (form == null) {
@@ -67,8 +75,8 @@ public class TaskFormSubmissionValidator {
 
         List<Evidence> taskEvidences = evidenceRepository.findByProcedureIdAndTaskIdAndNodeIdOrderByCreatedAtDesc(
                 procedure.getId(),
-                task.getId(),
-                task.getTaskDefinitionKey()
+                taskId,
+                nodeId
         );
 
         for (FormFieldResponse field : form.fields()) {
