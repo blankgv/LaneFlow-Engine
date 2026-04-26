@@ -75,6 +75,9 @@ class BpmnMetadataExtractor {
             List<WorkflowNode> nodes = new ArrayList<>();
             addNodes(document, "startEvent", NodeType.START_EVENT, nodeLaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
             addNodes(document, "endEvent", NodeType.END_EVENT, nodeLaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
+            addNodes(document, "intermediateCatchEvent", NodeType.INTERMEDIATE_EVENT, nodeLaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
+            addNodes(document, "intermediateThrowEvent", NodeType.INTERMEDIATE_EVENT, nodeLaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
+            addNodes(document, "boundaryEvent", NodeType.INTERMEDIATE_EVENT, nodeLaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
             addNodes(document, "task", NodeType.USER_TASK, nodeLaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
             addNodes(document, "userTask", NodeType.USER_TASK, nodeLaneMap, swimlanesById, departmentsByNormalizedKey, nodes);
             addNodes(document, "serviceTask", NodeType.SERVICE_TASK, nodeLaneMap, swimlanesById, departmentsByNormalizedKey, nodes);

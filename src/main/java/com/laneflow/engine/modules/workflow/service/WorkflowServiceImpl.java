@@ -327,7 +327,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     @Override
     public WorkflowResponse validate(String id, String username) {
         WorkflowDefinition wf = workflowAccessService.requireReadable(id, username);
-        workflowModelValidator.validateDraft(wf.getDraftBpmnXml(), wf.getSwimlanes(), wf.getNodes(), wf.getTransitions());
+        workflowModelValidator.validateCompleteDraft(wf.getSwimlanes(), wf.getNodes(), wf.getTransitions());
         return toResponse(wf);
     }
 
@@ -368,6 +368,8 @@ public class WorkflowServiceImpl implements WorkflowService {
                         sb.append("    <startEvent id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
                 case END_EVENT ->
                         sb.append("    <endEvent id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
+                case INTERMEDIATE_EVENT ->
+                        sb.append("    <intermediateCatchEvent id=\"").append(id).append("\" name=\"").append(name).append("\"/>\n");
                 case USER_TASK -> {
                     sb.append("    <userTask id=\"").append(id).append("\" name=\"").append(name).append("\"");
                     if (node.getDepartmentId() != null && !node.getDepartmentId().isBlank()) {
