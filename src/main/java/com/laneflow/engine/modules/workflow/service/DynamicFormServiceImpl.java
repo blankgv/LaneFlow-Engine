@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -48,6 +49,12 @@ public class DynamicFormServiceImpl implements DynamicFormService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Formulario no encontrado para el nodo %s del workflow %s".formatted(nodeId, workflowId)));
         return toResponse(form);
+    }
+
+    @Override
+    public Optional<DynamicFormResponse> findOptionalByWorkflowAndNode(String workflowId, String nodeId) {
+        return dynamicFormRepository.findByWorkflowDefinitionIdAndNodeId(workflowId, nodeId)
+                .map(this::toResponse);
     }
 
     @Override

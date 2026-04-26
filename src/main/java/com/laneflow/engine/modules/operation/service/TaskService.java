@@ -12,6 +12,7 @@ import java.util.List;
 public interface TaskService {
     List<TaskResponse> getAvailable(String username);
     List<TaskResponse> getMine(String username);
+    TaskResponse getById(String taskId, String username);
     TaskResponse claim(String taskId, String username);
     ProcedureResponse complete(String taskId, CompleteTaskRequest request, String username);
     ProcedureResponse approve(String taskId, ApproveTaskRequest request, String username);

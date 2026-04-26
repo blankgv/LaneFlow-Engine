@@ -37,6 +37,12 @@ public class TaskController {
         return ResponseEntity.ok(service.getMine(currentUsername()));
     }
 
+    @GetMapping("/{taskId}")
+    @PreAuthorize("hasAuthority('" + Permission.TRAMITE_READ + "')")
+    public ResponseEntity<TaskResponse> getById(@PathVariable String taskId) {
+        return ResponseEntity.ok(service.getById(taskId, currentUsername()));
+    }
+
     @PostMapping("/{taskId}/claim")
     @PreAuthorize("hasAuthority('" + Permission.TRAMITE_WRITE + "')")
     public ResponseEntity<TaskResponse> claim(@PathVariable String taskId) {

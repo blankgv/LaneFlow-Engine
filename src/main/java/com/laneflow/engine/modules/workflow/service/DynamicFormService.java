@@ -10,12 +10,15 @@ import com.laneflow.engine.modules.workflow.response.DynamicFormResponse;
 import com.laneflow.engine.modules.workflow.response.FormFieldResponse;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface DynamicFormService {
 
     List<DynamicFormResponse> findByWorkflow(String workflowId);
 
     DynamicFormResponse findByWorkflowAndNode(String workflowId, String nodeId);
+
+    Optional<DynamicFormResponse> findOptionalByWorkflowAndNode(String workflowId, String nodeId);
 
     DynamicFormResponse findById(String id);
 
