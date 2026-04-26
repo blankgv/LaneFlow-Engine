@@ -31,9 +31,11 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
     private final BpmnMetadataExtractor bpmnMetadataExtractor;
     private final WorkflowAuditService workflowAuditService;
     private final DynamicFormService dynamicFormService;
+    private final WorkflowAccessService workflowAccessService;
 
     @Override
-    public List<WorkflowVersionResponse> findByWorkflow(String workflowId) {
+    public List<WorkflowVersionResponse> findByWorkflow(String workflowId, String username) {
+        workflowAccessService.requireReadable(workflowId, username);
         return workflowVersionRepository.findByWorkflowDefinitionIdOrderByVersionNumberDesc(workflowId)
                 .stream()
                 .map(this::toResponse)
@@ -41,7 +43,8 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
     }
 
     @Override
-    public WorkflowVersionResponse findByWorkflowAndVersion(String workflowId, int versionNumber) {
+    public WorkflowVersionResponse findByWorkflowAndVersion(String workflowId, int versionNumber, String username) {
+        workflowAccessService.requireReadable(workflowId, username);
         WorkflowVersion version = workflowVersionRepository
                 .findByWorkflowDefinitionIdAndVersionNumber(workflowId, versionNumber)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -51,8 +54,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
 
     @Override
     public WorkflowVersionResponse createDraft(String workflowId, CreateVersionRequest request, String createdBy) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(workflowId)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + workflowId));
+        WorkflowDefinition wf = workflowAccessService.requireWritable(workflowId, createdBy);
 
         List<WorkflowVersion> existing = workflowVersionRepository
                 .findByWorkflowDefinitionIdOrderByVersionNumberDesc(workflowId);
@@ -70,6 +72,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
         if (request.bpmnXml() != null && !request.bpmnXml().isBlank()) {
             wf.setDraftBpmnXml(request.bpmnXml().trim());
             BpmnMetadataExtractor.BpmnStructure structure = bpmnMetadataExtractor.extract(wf.getDraftBpmnXml());
+            dynamicFormService.validateNodeBindings(wf.getId(), structure.nodes());
             wf.setSwimlanes(structure.swimlanes());
             wf.setNodes(structure.nodes());
             wf.setTransitions(structure.transitions());
@@ -99,8 +102,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
 
     @Override
     public WorkflowVersionResponse publish(String workflowId, int versionNumber, String publishedBy) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(workflowId)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + workflowId));
+        WorkflowDefinition wf = workflowAccessService.requireWritable(workflowId, publishedBy);
         WorkflowStatus statusBefore = wf.getStatus();
 
         WorkflowVersion version = workflowVersionRepository
@@ -115,6 +117,8 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
         if (version.getBpmnXml() == null || version.getBpmnXml().isBlank()) {
             throw new IllegalStateException("La versión no tiene BPMN XML para publicar.");
         }
+
+        dynamicFormService.validateNodeBindings(wf.getId(), wf.getNodes());
 
         // Deprecate any existing PUBLISHED version
         workflowVersionRepository.findByWorkflowDefinitionIdAndStatus(workflowId, WorkflowVersionStatus.PUBLISHED)

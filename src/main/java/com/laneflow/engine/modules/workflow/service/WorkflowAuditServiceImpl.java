@@ -20,6 +20,7 @@ public class WorkflowAuditServiceImpl implements WorkflowAuditService {
 
     private final WorkflowAuditRepository workflowAuditRepository;
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
+    private final WorkflowAccessService workflowAccessService;
 
     @Override
     public void record(WorkflowDefinition workflow,
@@ -43,7 +44,8 @@ public class WorkflowAuditServiceImpl implements WorkflowAuditService {
     }
 
     @Override
-    public WorkflowHistoryResponse getHistory(String workflowId) {
+    public WorkflowHistoryResponse getHistory(String workflowId, String username) {
+        workflowAccessService.requireReadable(workflowId, username);
         WorkflowDefinition workflow = workflowDefinitionRepository.findById(workflowId).orElse(null);
         List<WorkflowAudit> audits = workflowAuditRepository.findByWorkflowDefinitionIdOrderByCreatedAtAsc(workflowId);
         List<WorkflowHistoryItemResponse> history = audits.stream()

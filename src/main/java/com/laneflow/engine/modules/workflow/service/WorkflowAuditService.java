@@ -17,5 +17,5 @@ public interface WorkflowAuditService {
                 WorkflowStatus statusAfter,
                 Map<String, Object> metadata);
 
-    WorkflowHistoryResponse getHistory(String workflowId);
+    WorkflowHistoryResponse getHistory(String workflowId, String username);
 }

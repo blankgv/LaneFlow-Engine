@@ -9,9 +9,9 @@ import java.util.List;
 
 public interface WorkflowService {
 
-    List<WorkflowSummaryResponse> findAll();
+    List<WorkflowSummaryResponse> findAll(String username);
 
-    WorkflowResponse findById(String id);
+    WorkflowResponse findById(String id, String username);
 
     WorkflowResponse create(CreateWorkflowRequest request, String createdBy);
 
@@ -21,5 +21,5 @@ public interface WorkflowService {
 
     void delete(String id, String deletedBy);
 
-    WorkflowResponse validate(String id);
+    WorkflowResponse validate(String id, String username);
 }

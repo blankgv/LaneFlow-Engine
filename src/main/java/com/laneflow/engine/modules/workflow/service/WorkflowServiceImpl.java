@@ -40,19 +40,19 @@ public class WorkflowServiceImpl implements WorkflowService {
     private final BpmnMetadataExtractor bpmnMetadataExtractor;
     private final WorkflowAuditService workflowAuditService;
     private final DynamicFormService dynamicFormService;
+    private final WorkflowAccessService workflowAccessService;
 
     @Override
-    public List<WorkflowSummaryResponse> findAll() {
-        return workflowDefinitionRepository.findAll()
+    public List<WorkflowSummaryResponse> findAll(String username) {
+        return workflowAccessService.filterReadable(workflowDefinitionRepository.findAll(), username)
                 .stream()
                 .map(this::toSummaryResponse)
                 .toList();
     }
 
     @Override
-    public WorkflowResponse findById(String id) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
+    public WorkflowResponse findById(String id, String username) {
+        WorkflowDefinition wf = workflowAccessService.requireReadable(id, username);
         return toResponse(wf);
     }
 
@@ -118,8 +118,7 @@ public class WorkflowServiceImpl implements WorkflowService {
 
     @Override
     public WorkflowResponse update(String id, UpdateWorkflowRequest request, String updatedBy) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
+        WorkflowDefinition wf = workflowAccessService.requireWritable(id, updatedBy);
 
         if (wf.getStatus() != WorkflowStatus.DRAFT) {
             throw new IllegalStateException("Solo se pueden editar workflows en estado DRAFT.");
@@ -133,6 +132,7 @@ public class WorkflowServiceImpl implements WorkflowService {
             wf.setDraftBpmnXml(normalizeXml(request.bpmnXml()));
             if (wf.getDraftBpmnXml() != null) {
                 BpmnMetadataExtractor.BpmnStructure structure = bpmnMetadataExtractor.extract(wf.getDraftBpmnXml());
+                dynamicFormService.validateNodeBindings(wf.getId(), structure.nodes());
                 wf.setSwimlanes(structure.swimlanes());
                 wf.setNodes(structure.nodes());
                 wf.setTransitions(structure.transitions());
@@ -174,6 +174,7 @@ public class WorkflowServiceImpl implements WorkflowService {
         }
 
         validateDraftPayload(wf.getDraftBpmnXml(), wf.getNodes(), wf.getTransitions());
+        dynamicFormService.validateNodeBindings(wf.getId(), wf.getNodes());
 
         wf.setLastModifiedBy(updatedBy);
         wf.setUpdatedAt(LocalDateTime.now());
@@ -197,8 +198,7 @@ public class WorkflowServiceImpl implements WorkflowService {
 
     @Override
     public WorkflowResponse publish(String id, String publishedBy) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
+        WorkflowDefinition wf = workflowAccessService.requireWritable(id, publishedBy);
 
         WorkflowStatus statusBefore = wf.getStatus();
 
@@ -207,6 +207,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                 wf.getCamundaProcessKey(),
                 wf.getName()
         );
+        dynamicFormService.validateNodeBindings(wf.getId(), wf.getNodes());
         int nextVersionNumber = resolveNextVersionNumber(wf.getId());
 
         try {
@@ -289,8 +290,7 @@ public class WorkflowServiceImpl implements WorkflowService {
 
     @Override
     public void delete(String id, String deletedBy) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
+        WorkflowDefinition wf = workflowAccessService.requireWritable(id, deletedBy);
 
         if (wf.getStatus() != WorkflowStatus.DRAFT) {
             throw new IllegalStateException("Solo se pueden eliminar workflows en estado DRAFT.");
@@ -313,10 +313,8 @@ public class WorkflowServiceImpl implements WorkflowService {
     }
 
     @Override
-    public WorkflowResponse validate(String id) {
-        WorkflowDefinition wf = workflowDefinitionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Workflow no encontrado: " + id));
-
+    public WorkflowResponse validate(String id, String username) {
+        WorkflowDefinition wf = workflowAccessService.requireReadable(id, username);
         validateDraftPayload(wf.getDraftBpmnXml(), wf.getNodes(), wf.getTransitions());
         return toResponse(wf);
     }

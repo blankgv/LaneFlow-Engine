@@ -26,7 +26,7 @@ public class WorkflowCollaborationController {
     @GetMapping(ApiVersion.V1 + "/workflows/{workflowId}/collaborators")
     @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_READ + "')")
     public ResponseEntity<List<WorkflowCollaboratorResponse>> findCollaborators(@PathVariable String workflowId) {
-        return ResponseEntity.ok(workflowCollaborationService.findCollaborators(workflowId));
+        return ResponseEntity.ok(workflowCollaborationService.findCollaborators(workflowId, currentUsername()));
     }
 
     @GetMapping(ApiVersion.V1 + "/workflows/{workflowId}/invitees")
@@ -38,7 +38,7 @@ public class WorkflowCollaborationController {
     @GetMapping(ApiVersion.V1 + "/workflows/{workflowId}/invitations")
     @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_READ + "')")
     public ResponseEntity<List<WorkflowInvitationResponse>> findInvitationsByWorkflow(@PathVariable String workflowId) {
-        return ResponseEntity.ok(workflowCollaborationService.findInvitationsByWorkflow(workflowId));
+        return ResponseEntity.ok(workflowCollaborationService.findInvitationsByWorkflow(workflowId, currentUsername()));
     }
 
     @GetMapping(ApiVersion.V1 + "/workflow-invitations/mine")

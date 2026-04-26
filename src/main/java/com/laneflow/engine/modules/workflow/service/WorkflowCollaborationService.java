@@ -9,11 +9,11 @@ import java.util.List;
 
 public interface WorkflowCollaborationService {
 
-    List<WorkflowCollaboratorResponse> findCollaborators(String workflowId);
+    List<WorkflowCollaboratorResponse> findCollaborators(String workflowId, String username);
 
     List<WorkflowInviteeResponse> findEligibleInvitees(String workflowId, String currentUsername);
 
-    List<WorkflowInvitationResponse> findInvitationsByWorkflow(String workflowId);
+    List<WorkflowInvitationResponse> findInvitationsByWorkflow(String workflowId, String username);
 
     List<WorkflowInvitationResponse> findMyInvitations(String username);
 

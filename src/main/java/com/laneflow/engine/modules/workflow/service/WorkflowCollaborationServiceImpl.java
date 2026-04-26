@@ -37,10 +37,11 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final WorkflowAuditService workflowAuditService;
+    private final WorkflowAccessService workflowAccessService;
 
     @Override
-    public List<WorkflowCollaboratorResponse> findCollaborators(String workflowId) {
-        ensureWorkflowExists(workflowId);
+    public List<WorkflowCollaboratorResponse> findCollaborators(String workflowId, String username) {
+        workflowAccessService.requireReadable(workflowId, username);
         return workflowCollaboratorRepository.findByWorkflowDefinitionIdOrderByCreatedAtAsc(workflowId)
                 .stream()
                 .map(this::toCollaboratorResponse)
@@ -49,7 +50,7 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
 
     @Override
     public List<WorkflowInviteeResponse> findEligibleInvitees(String workflowId, String currentUsername) {
-        ensureWorkflowExists(workflowId);
+        workflowAccessService.requireWritable(workflowId, currentUsername);
         User currentUser = findUserByUsername(currentUsername);
 
         Set<String> excludedUserIds = new HashSet<>();
@@ -68,8 +69,8 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
     }
 
     @Override
-    public List<WorkflowInvitationResponse> findInvitationsByWorkflow(String workflowId) {
-        ensureWorkflowExists(workflowId);
+    public List<WorkflowInvitationResponse> findInvitationsByWorkflow(String workflowId, String username) {
+        workflowAccessService.requireReadable(workflowId, username);
         return workflowInvitationRepository.findByWorkflowDefinitionIdOrderByCreatedAtDesc(workflowId)
                 .stream()
                 .map(this::toInvitationResponse)
@@ -87,7 +88,7 @@ public class WorkflowCollaborationServiceImpl implements WorkflowCollaborationSe
 
     @Override
     public WorkflowInvitationResponse invite(String workflowId, CreateWorkflowInvitationRequest request, String invitedByUsername) {
-        WorkflowDefinition workflow = ensureWorkflowExists(workflowId);
+        WorkflowDefinition workflow = workflowAccessService.requireWritable(workflowId, invitedByUsername);
         User invitedBy = findUserByUsername(invitedByUsername);
         User invitedUser = findUserByUsername(request.invitedUsername());
 

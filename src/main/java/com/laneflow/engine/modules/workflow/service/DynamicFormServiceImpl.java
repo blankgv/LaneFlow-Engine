@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,9 +35,11 @@ public class DynamicFormServiceImpl implements DynamicFormService {
     private final DynamicFormRepository dynamicFormRepository;
     private final FormFieldRepository formFieldRepository;
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
+    private final WorkflowAccessService workflowAccessService;
 
     @Override
-    public List<DynamicFormResponse> findByWorkflow(String workflowId) {
+    public List<DynamicFormResponse> findByWorkflow(String workflowId, String username) {
+        workflowAccessService.requireReadable(workflowId, username);
         return dynamicFormRepository.findByWorkflowDefinitionId(workflowId)
                 .stream()
                 .map(this::toResponse)
@@ -44,7 +47,8 @@ public class DynamicFormServiceImpl implements DynamicFormService {
     }
 
     @Override
-    public DynamicFormResponse findByWorkflowAndNode(String workflowId, String nodeId) {
+    public DynamicFormResponse findByWorkflowAndNode(String workflowId, String nodeId, String username) {
+        workflowAccessService.requireReadable(workflowId, username);
         DynamicForm form = dynamicFormRepository.findByWorkflowDefinitionIdAndNodeId(workflowId, nodeId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Formulario no encontrado para el nodo %s del workflow %s".formatted(nodeId, workflowId)));
@@ -58,17 +62,16 @@ public class DynamicFormServiceImpl implements DynamicFormService {
     }
 
     @Override
-    public DynamicFormResponse findById(String id) {
+    public DynamicFormResponse findById(String id, String username) {
         DynamicForm form = dynamicFormRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Formulario no encontrado: " + id));
+        workflowAccessService.requireReadable(form.getWorkflowDefinitionId(), username);
         return toResponse(form);
     }
 
     @Override
-    public DynamicFormResponse create(CreateFormRequest request) {
-        WorkflowDefinition workflow = workflowDefinitionRepository.findById(request.workflowDefinitionId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Workflow no encontrado: " + request.workflowDefinitionId()));
+    public DynamicFormResponse create(CreateFormRequest request, String username) {
+        WorkflowDefinition workflow = workflowAccessService.requireWritable(request.workflowDefinitionId(), username);
         WorkflowNode node = findAssignableNode(workflow, request.nodeId());
 
         dynamicFormRepository.findByWorkflowDefinitionIdAndNodeId(request.workflowDefinitionId(), request.nodeId())
@@ -91,12 +94,10 @@ public class DynamicFormServiceImpl implements DynamicFormService {
     }
 
     @Override
-    public DynamicFormResponse update(String id, UpdateFormRequest request) {
+    public DynamicFormResponse update(String id, UpdateFormRequest request, String username) {
         DynamicForm form = dynamicFormRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Formulario no encontrado: " + id));
-        WorkflowDefinition workflow = workflowDefinitionRepository.findById(form.getWorkflowDefinitionId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Workflow no encontrado: " + form.getWorkflowDefinitionId()));
+        WorkflowDefinition workflow = workflowAccessService.requireWritable(form.getWorkflowDefinitionId(), username);
         WorkflowNode node = findAssignableNode(workflow, form.getNodeId());
 
         form.setNodeName(node.getName());
@@ -108,9 +109,10 @@ public class DynamicFormServiceImpl implements DynamicFormService {
 
     @Override
     @Transactional
-    public void delete(String id) {
+    public void delete(String id, String username) {
         DynamicForm form = dynamicFormRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Formulario no encontrado: " + id));
+        workflowAccessService.requireWritable(form.getWorkflowDefinitionId(), username);
         workflowDefinitionRepository.findById(form.getWorkflowDefinitionId()).ifPresent(workflow -> {
             WorkflowNode node = findNode(workflow, form.getNodeId());
             if (node != null && id.equals(node.getFormKey())) {
@@ -125,9 +127,10 @@ public class DynamicFormServiceImpl implements DynamicFormService {
     }
 
     @Override
-    public FormFieldResponse addField(String formId, CreateFieldRequest request) {
-        dynamicFormRepository.findById(formId)
+    public FormFieldResponse addField(String formId, CreateFieldRequest request, String username) {
+        DynamicForm form = dynamicFormRepository.findById(formId)
                 .orElseThrow(() -> new IllegalArgumentException("Formulario no encontrado: " + formId));
+        workflowAccessService.requireWritable(form.getWorkflowDefinitionId(), username);
 
         List<FieldValidation> validations = null;
         if (request.validations() != null) {
@@ -168,9 +171,12 @@ public class DynamicFormServiceImpl implements DynamicFormService {
     }
 
     @Override
-    public FormFieldResponse updateField(String formId, String fieldId, UpdateFieldRequest request) {
+    public FormFieldResponse updateField(String formId, String fieldId, UpdateFieldRequest request, String username) {
         FormField field = formFieldRepository.findById(fieldId)
                 .orElseThrow(() -> new IllegalArgumentException("Campo no encontrado: " + fieldId));
+        DynamicForm form = dynamicFormRepository.findById(formId)
+                .orElseThrow(() -> new IllegalArgumentException("Formulario no encontrado: " + formId));
+        workflowAccessService.requireWritable(form.getWorkflowDefinitionId(), username);
 
         if (!formId.equals(field.getFormId())) {
             throw new IllegalArgumentException("El campo no pertenece al formulario: " + formId);
@@ -207,9 +213,12 @@ public class DynamicFormServiceImpl implements DynamicFormService {
     }
 
     @Override
-    public void deleteField(String formId, String fieldId) {
+    public void deleteField(String formId, String fieldId, String username) {
         FormField field = formFieldRepository.findById(fieldId)
                 .orElseThrow(() -> new IllegalArgumentException("Campo no encontrado: " + fieldId));
+        DynamicForm form = dynamicFormRepository.findById(formId)
+                .orElseThrow(() -> new IllegalArgumentException("Formulario no encontrado: " + formId));
+        workflowAccessService.requireWritable(form.getWorkflowDefinitionId(), username);
 
         if (!formId.equals(field.getFormId())) {
             throw new IllegalArgumentException("El campo no pertenece al formulario: " + formId);
@@ -220,9 +229,10 @@ public class DynamicFormServiceImpl implements DynamicFormService {
     }
 
     @Override
-    public List<FormFieldResponse> reorderFields(String formId, ReorderFieldsRequest request) {
-        dynamicFormRepository.findById(formId)
+    public List<FormFieldResponse> reorderFields(String formId, ReorderFieldsRequest request, String username) {
+        DynamicForm form = dynamicFormRepository.findById(formId)
                 .orElseThrow(() -> new IllegalArgumentException("Formulario no encontrado: " + formId));
+        workflowAccessService.requireWritable(form.getWorkflowDefinitionId(), username);
 
         for (ReorderFieldsRequest.FieldOrderItem item : request.fields()) {
             formFieldRepository.findById(item.fieldId()).ifPresent(field -> {
@@ -238,6 +248,37 @@ public class DynamicFormServiceImpl implements DynamicFormService {
                 .stream()
                 .map(this::toFieldResponse)
                 .toList();
+    }
+
+    @Override
+    public void validateNodeBindings(String workflowId, List<WorkflowNode> nodes) {
+        List<DynamicForm> forms = dynamicFormRepository.findByWorkflowDefinitionId(workflowId);
+        if (forms.isEmpty()) {
+            return;
+        }
+
+        List<String> errors = new ArrayList<>();
+        for (DynamicForm form : forms) {
+            WorkflowNode node = nodes == null ? null : nodes.stream()
+                    .filter(candidate -> form.getNodeId().equals(candidate.getId()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (node == null) {
+                errors.add("El formulario '%s' quedaria huerfano porque el nodo '%s' ya no existe."
+                        .formatted(form.getTitle(), form.getNodeId()));
+                continue;
+            }
+
+            if (node.getType() != NodeType.USER_TASK) {
+                errors.add("El formulario '%s' no puede quedar asignado al nodo '%s' porque ya no es USER_TASK."
+                        .formatted(form.getTitle(), form.getNodeId()));
+            }
+        }
+
+        if (!errors.isEmpty()) {
+            throw new IllegalStateException(String.join(" ", errors));
+        }
     }
 
     @Override
