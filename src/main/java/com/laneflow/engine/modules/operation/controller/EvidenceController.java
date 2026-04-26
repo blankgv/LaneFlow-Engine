@@ -30,7 +30,7 @@ public class EvidenceController {
                                                     @RequestParam String nodeId,
                                                     @RequestParam String fieldName,
                                                     @RequestParam(required = false) String description,
-                                                    @RequestParam(defaultValue = "GENERAL") EvidenceCategory category,
+                                                    @RequestParam(required = false) EvidenceCategory category,
                                                     @RequestPart("file") MultipartFile file) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.upload(
