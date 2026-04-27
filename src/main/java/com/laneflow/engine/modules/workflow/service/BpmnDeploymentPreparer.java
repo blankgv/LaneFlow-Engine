@@ -91,6 +91,7 @@ final class BpmnDeploymentPreparer {
             primaryProcess.setAttribute("isExecutable", "true");
             primaryProcess.setAttributeNS("http://camunda.org/schema/1.0/bpmn", "camunda:historyTimeToLive", "180");
 
+            convertGenericTasksToUserTasks(document);
             removeSiblingProcesses(document, primaryProcess);
             removeElements(document, "collaboration");
             removeElements(document, "participant");
@@ -102,6 +103,18 @@ final class BpmnDeploymentPreparer {
             return toXml(document);
         } catch (Exception e) {
             throw new IllegalArgumentException("No se pudo preparar el BPMN ejecutable para Camunda: " + e.getMessage(), e);
+        }
+    }
+
+    private static void convertGenericTasksToUserTasks(Document document) {
+        NodeList taskNodes = document.getElementsByTagNameNS("*", "task");
+        for (int i = taskNodes.getLength() - 1; i >= 0; i--) {
+            Node taskNode = taskNodes.item(i);
+            document.renameNode(
+                    taskNode,
+                    "http://www.omg.org/spec/BPMN/20100524/MODEL",
+                    "bpmn:userTask"
+            );
         }
     }
 
