@@ -133,13 +133,20 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
                 wf.getCamundaProcessKey(),
                 wf.getName()
         );
+        String executableBpmnXml = BpmnDeploymentPreparer.prepareExecutableDeployment(
+                bpmnXml,
+                wf.getCamundaProcessKey(),
+                wf.getName()
+        );
         BpmnMetadataExtractor.BpmnStructure publishStructure = bpmnMetadataExtractor.extract(bpmnXml);
         workflowModelValidator.validatePublishable(
                 wf.getCode(),
                 wf.getName(),
                 publishStructure.swimlanes(),
                 publishStructure.nodes(),
-                publishStructure.transitions()
+                publishStructure.transitions(),
+                publishStructure.participantCount(),
+                publishStructure.laneCount()
         );
         wf.setSwimlanes(publishStructure.swimlanes());
         wf.setNodes(publishStructure.nodes());
@@ -149,7 +156,7 @@ public class WorkflowVersionServiceImpl implements WorkflowVersionService {
         try {
             Deployment deployment = repositoryService.createDeployment()
                     .addInputStream(wf.getCamundaProcessKey() + "_v" + versionNumber + ".bpmn",
-                            new ByteArrayInputStream(bpmnXml.getBytes(StandardCharsets.UTF_8)))
+                            new ByteArrayInputStream(executableBpmnXml.getBytes(StandardCharsets.UTF_8)))
                     .name(wf.getName() + " v" + versionNumber)
                     .deploy();
 

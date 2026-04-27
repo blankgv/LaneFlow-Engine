@@ -35,6 +35,8 @@ import java.util.UUID;
 public class ProcedureServiceImpl implements ProcedureService {
 
     private static final DateTimeFormatter CODE_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final int ACTIVE_TASK_LOOKUP_ATTEMPTS = 10;
+    private static final long ACTIVE_TASK_LOOKUP_DELAY_MS = 300L;
 
     private final ProcedureRepository procedureRepository;
     private final ApplicantRepository applicantRepository;
@@ -93,13 +95,7 @@ public class ProcedureServiceImpl implements ProcedureService {
             );
             startedInstanceId = instance.getId();
 
-            Task activeTask = taskService.createTaskQuery()
-                    .processInstanceId(instance.getId())
-                    .active()
-                    .listPage(0, 1)
-                    .stream()
-                    .findFirst()
-                    .orElse(null);
+            Task activeTask = waitForFirstActiveTask(instance.getId());
 
             procedure.setCamundaProcessInstanceId(instance.getId());
             procedure.setStatus(ProcedureStatus.IN_PROGRESS);
@@ -218,13 +214,7 @@ public class ProcedureServiceImpl implements ProcedureService {
             );
             restartedInstanceId = instance.getId();
 
-            Task activeTask = taskService.createTaskQuery()
-                    .processInstanceId(instance.getId())
-                    .active()
-                    .listPage(0, 1)
-                    .stream()
-                    .findFirst()
-                    .orElse(null);
+            Task activeTask = waitForFirstActiveTask(instance.getId());
 
             procedure.setCamundaProcessInstanceId(instance.getId());
             procedure.setStatus(ProcedureStatus.IN_PROGRESS);
@@ -384,6 +374,31 @@ public class ProcedureServiceImpl implements ProcedureService {
     private String trimToNull(String value) {
         if (value == null || value.isBlank()) return null;
         return value.trim();
+    }
+
+    private Task waitForFirstActiveTask(String processInstanceId) {
+        for (int attempt = 0; attempt < ACTIVE_TASK_LOOKUP_ATTEMPTS; attempt++) {
+            Task activeTask = taskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .active()
+                    .listPage(0, 1)
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+
+            if (activeTask != null) {
+                return activeTask;
+            }
+
+            try {
+                Thread.sleep(ACTIVE_TASK_LOOKUP_DELAY_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        return null;
     }
 
     private void safeDeleteProcessInstance(String instanceId, String reason) {

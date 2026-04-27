@@ -41,6 +41,7 @@ public class DataSeeder implements ApplicationRunner {
         seedDepartments();
         seedStaff();
         seedRoles();
+        syncAllRolePermissionsForTesting();
         seedUsers();
         seedApplicants();
     }
@@ -131,6 +132,29 @@ public class DataSeeder implements ApplicationRunner {
         ));
 
         log.info("Seed: 8 usuarios creados (password: passw0rd).");
+    }
+
+    private void syncAllRolePermissionsForTesting() {
+        List<Role> roles = roleRepository.findAll();
+        if (roles.isEmpty()) {
+            return;
+        }
+
+        boolean updated = false;
+        for (Role role : roles) {
+            if (!Permission.ALL.equals(role.getPermissions())) {
+                role.setPermissions(Permission.ALL);
+                role.setUpdatedAt(java.time.LocalDateTime.now());
+                updated = true;
+            }
+        }
+
+        if (updated) {
+            roleRepository.saveAll(roles);
+            log.info("Permisos de prueba aplicados: todos los roles ahora usan Permission.ALL.");
+        } else {
+            log.info("Permisos de prueba ya estaban aplicados a todos los roles.");
+        }
     }
 
     private void seedApplicants() {
