@@ -18,6 +18,7 @@ public record TaskResponse(
         String assignee,
         String responsibleDepartmentId,
         String responsibleDepartmentCode,
+        String responsibleDepartmentName,
         DynamicFormResponse form,
         LocalDateTime createdAt
 ) {}

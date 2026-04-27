@@ -334,11 +334,12 @@ public class TaskServiceImpl implements TaskService {
                 .orElse(null);
 
         if (node == null) {
-            return new ResponsibleDepartment(null, null);
+            return ResponsibleDepartment.empty();
         }
 
         if (node.getDepartmentId() != null && !node.getDepartmentId().isBlank()) {
-            return new ResponsibleDepartment(node.getDepartmentId(), null);
+            return resolveDepartmentById(node.getDepartmentId())
+                    .orElseGet(() -> new ResponsibleDepartment(node.getDepartmentId(), null, null));
         }
 
         Swimlane swimlane = workflow.getSwimlanes() == null ? null : workflow.getSwimlanes().stream()
@@ -347,21 +348,39 @@ public class TaskServiceImpl implements TaskService {
                 .orElse(null);
 
         if (swimlane == null) {
-            return new ResponsibleDepartment(null, null);
+            return ResponsibleDepartment.empty();
         }
 
         if (swimlane.getDepartmentId() != null && !swimlane.getDepartmentId().isBlank()) {
-            return new ResponsibleDepartment(swimlane.getDepartmentId(), swimlane.getDepartmentCode());
+            return resolveDepartmentById(swimlane.getDepartmentId())
+                    .orElseGet(() -> new ResponsibleDepartment(
+                            swimlane.getDepartmentId(),
+                            swimlane.getDepartmentCode(),
+                            swimlane.getName()
+                    ));
         }
 
         if (swimlane.getDepartmentCode() != null && !swimlane.getDepartmentCode().isBlank()) {
             Optional<Department> department = departmentRepository.findByCode(swimlane.getDepartmentCode());
             if (department.isPresent()) {
-                return new ResponsibleDepartment(department.get().getId(), department.get().getCode());
+                return new ResponsibleDepartment(
+                        department.get().getId(),
+                        department.get().getCode(),
+                        department.get().getName()
+                );
             }
         }
 
-        return new ResponsibleDepartment(null, swimlane.getDepartmentCode());
+        return new ResponsibleDepartment(null, swimlane.getDepartmentCode(), swimlane.getName());
+    }
+
+    private Optional<ResponsibleDepartment> resolveDepartmentById(String departmentId) {
+        return departmentRepository.findById(departmentId)
+                .map(department -> new ResponsibleDepartment(
+                        department.getId(),
+                        department.getCode(),
+                        department.getName()
+                ));
     }
 
     private Procedure resolveProcedure(Task task) {
@@ -399,6 +418,7 @@ public class TaskServiceImpl implements TaskService {
                 task.getAssignee(),
                 responsible.departmentId(),
                 responsible.departmentCode(),
+                responsible.departmentName(),
                 form,
                 task.getCreateTime() == null ? null : LocalDateTime.ofInstant(
                         task.getCreateTime().toInstant(),
@@ -490,5 +510,9 @@ public class TaskServiceImpl implements TaskService {
         }
     }
 
-    private record ResponsibleDepartment(String departmentId, String departmentCode) {}
+    private record ResponsibleDepartment(String departmentId, String departmentCode, String departmentName) {
+        private static ResponsibleDepartment empty() {
+            return new ResponsibleDepartment(null, null, null);
+        }
+    }
 }
