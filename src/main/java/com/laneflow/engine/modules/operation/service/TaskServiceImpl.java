@@ -34,6 +34,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -419,6 +420,7 @@ public class TaskServiceImpl implements TaskService {
                 responsible.departmentId(),
                 responsible.departmentCode(),
                 responsible.departmentName(),
+                procedure.getFormData() == null ? Collections.emptyMap() : Map.copyOf(procedure.getFormData()),
                 form,
                 task.getCreateTime() == null ? null : LocalDateTime.ofInstant(
                         task.getCreateTime().toInstant(),

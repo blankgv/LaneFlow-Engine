@@ -27,8 +27,8 @@ public class EvidenceController {
     @PreAuthorize("hasAuthority('" + Permission.TRAMITE_WRITE + "')")
     public ResponseEntity<EvidenceResponse> upload(@RequestParam String procedureId,
                                                     @RequestParam(required = false) String taskId,
-                                                    @RequestParam String nodeId,
-                                                    @RequestParam String fieldName,
+                                                    @RequestParam(required = false) String nodeId,
+                                                    @RequestParam(required = false) String fieldName,
                                                     @RequestParam(required = false) String description,
                                                     @RequestParam(required = false) EvidenceCategory category,
                                                     @RequestPart("file") MultipartFile file) {
