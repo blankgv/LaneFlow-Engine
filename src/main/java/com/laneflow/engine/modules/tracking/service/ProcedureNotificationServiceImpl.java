@@ -27,6 +27,7 @@ public class ProcedureNotificationServiceImpl implements ProcedureNotificationSe
     private final ProcedureRepository procedureRepository;
     private final ApplicantRepository applicantRepository;
     private final EmailService emailService;
+    private final FcmService fcmService;
 
     @Override
     public void notifyApplicant(Procedure procedure, NotificationType type) {
@@ -50,20 +51,23 @@ public class ProcedureNotificationServiceImpl implements ProcedureNotificationSe
             notification.setStatus(NotificationStatus.FAILED);
             notification.setErrorMessage("El solicitante no tiene un email configurado.");
             repository.save(notification);
-            return;
+        } else {
+            try {
+                emailService.sendEmail(recipient, subject, message);
+                notification.setStatus(NotificationStatus.SENT);
+                notification.setSentAt(LocalDateTime.now());
+            } catch (Exception ex) {
+                log.warn("No se pudo enviar notificacion {} del tramite {}", type, procedure.getId(), ex);
+                notification.setStatus(NotificationStatus.FAILED);
+                notification.setErrorMessage(ex.getMessage());
+            }
+            repository.save(notification);
         }
 
-        try {
-            emailService.sendEmail(recipient, subject, message);
-            notification.setStatus(NotificationStatus.SENT);
-            notification.setSentAt(LocalDateTime.now());
-        } catch (Exception ex) {
-            log.warn("No se pudo enviar notificacion {} del tramite {}", type, procedure.getId(), ex);
-            notification.setStatus(NotificationStatus.FAILED);
-            notification.setErrorMessage(ex.getMessage());
-        }
-
-        repository.save(notification);
+        // Push notification siempre (independiente del email)
+        String pushTitle = buildSubject(procedure, type).replace("LaneFlow - ", "");
+        String pushBody = "Trámite %s — %s".formatted(procedure.getCode(), buildPushBody(type));
+        fcmService.sendToApplicant(procedure.getApplicantId(), pushTitle, pushBody, procedure.getId());
     }
 
     @Override
@@ -126,6 +130,16 @@ public class ProcedureNotificationServiceImpl implements ProcedureNotificationSe
         String fullName = ((applicant.getFirstName() == null ? "" : applicant.getFirstName().trim()) + " "
                 + (applicant.getLastName() == null ? "" : applicant.getLastName().trim())).trim();
         return fullName.isBlank() ? procedure.getApplicantName() : fullName;
+    }
+
+    private String buildPushBody(NotificationType type) {
+        return switch (type) {
+            case PROCEDURE_STARTED -> "fue iniciado y enviado al flujo.";
+            case PROCEDURE_APPROVED -> "fue aprobado.";
+            case PROCEDURE_OBSERVED -> "tiene observaciones pendientes.";
+            case PROCEDURE_REJECTED -> "fue rechazado.";
+            case OBSERVATION_RESOLVED -> "fue reingresado al flujo.";
+        };
     }
 
     private String trimToNull(String value) {

@@ -91,6 +91,13 @@
             <version>2.43.0</version>
         </dependency>
 
+        <!-- Firebase Admin SDK (FCM push notifications) -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.4.1</version>
+        </dependency>
+
         <!-- Camunda 7 Spring Boot Starter -->
         <dependency>
             <groupId>org.camunda.bpm.springboot</groupId>

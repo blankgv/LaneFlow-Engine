@@ -25,7 +25,7 @@ public class WorkflowController {
     private final WorkflowService workflowService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_READ + "')")
+    @PreAuthorize("hasAnyAuthority('" + Permission.WORKFLOW_READ + "', '" + Permission.TRAMITE_WRITE + "', '" + Permission.TRAMITE_READ + "')")
     public ResponseEntity<List<WorkflowSummaryResponse>> findAll() {
         return ResponseEntity.ok(workflowService.findAll(currentUsername()));
     }
@@ -38,7 +38,7 @@ public class WorkflowController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('" + Permission.WORKFLOW_READ + "')")
+    @PreAuthorize("hasAnyAuthority('" + Permission.WORKFLOW_READ + "', '" + Permission.TRAMITE_WRITE + "', '" + Permission.TRAMITE_READ + "')")
     public ResponseEntity<WorkflowResponse> findById(@PathVariable String id) {
         return ResponseEntity.ok(workflowService.findById(id, currentUsername()));
     }

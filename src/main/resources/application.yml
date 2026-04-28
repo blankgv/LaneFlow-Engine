@@ -57,6 +57,9 @@ gcp:
     bucket: ${GCP_STORAGE_BUCKET}
     evidence-prefix: ${GCP_STORAGE_EVIDENCE_PREFIX:evidences}
 
+firebase:
+  credentials-file: ${FIREBASE_CREDENTIALS_FILE:}
+
 springdoc:
   swagger-ui:
     path: /docs
