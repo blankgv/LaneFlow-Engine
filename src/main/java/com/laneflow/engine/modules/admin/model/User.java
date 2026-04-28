@@ -25,11 +25,12 @@ public class User {
 
     private String password;
 
-    @Indexed(unique = true)
+    @Indexed(unique = true, sparse = true)
     private String email;
 
     private String staffId;
     private String roleId;
+    private String applicantId;
 
     @Builder.Default
     private boolean active = true;
