@@ -8,7 +8,9 @@ services:
     env_file: .env
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-credentials.json
+      FIREBASE_CREDENTIALS_FILE: /secrets/firebase-credentials.json
     volumes:
       - ${GCP_CREDENTIALS_FILE}:/secrets/gcp-credentials.json:ro
+      - ${FIREBASE_CREDENTIALS_FILE}:/secrets/firebase-credentials.json:ro
     ports:
       - "8080:8080"
