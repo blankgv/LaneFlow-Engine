@@ -103,13 +103,6 @@ public class ProcedureServiceImpl implements ProcedureService {
                 procedure.setCurrentTaskId(activeTask.getId());
                 procedure.setCurrentNodeId(activeTask.getTaskDefinitionKey());
                 procedure.setCurrentNodeName(activeTask.getName());
-                taskFormSubmissionValidator.validate(
-                        procedure,
-                        activeTask.getId(),
-                        activeTask.getTaskDefinitionKey(),
-                        request.formData(),
-                        procedure.getFormData()
-                );
             }
             procedure.setUpdatedAt(LocalDateTime.now());
             Procedure saved = procedureRepository.save(procedure);
