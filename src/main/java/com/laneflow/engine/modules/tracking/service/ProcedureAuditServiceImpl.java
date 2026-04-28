@@ -87,6 +87,16 @@ public class ProcedureAuditServiceImpl implements ProcedureAuditService {
     }
 
     private String resolveTitle(ProcedureAudit audit) {
+        if (isProcedureCompletionAudit(audit)) {
+            return "Tramite finalizado";
+        }
+        if (isFormAttachmentAudit(audit)) {
+            return switch (audit.getAction()) {
+                case EVIDENCE_UPLOADED -> "Adjunto de formulario cargado";
+                case EVIDENCE_DELETED -> "Adjunto de formulario eliminado";
+                default -> "";
+            };
+        }
         return switch (audit.getAction()) {
             case PROCEDURE_STARTED -> "Tramite iniciado";
             case TASK_CLAIMED -> "Tarea tomada";
@@ -104,6 +114,21 @@ public class ProcedureAuditServiceImpl implements ProcedureAuditService {
         String actor = audit.getUsername() == null || audit.getUsername().isBlank()
                 ? "el sistema"
                 : audit.getUsername();
+
+        if (isProcedureCompletionAudit(audit)) {
+            return "El tramite fue finalizado por %s en la actividad %s.".formatted(actor, resolveNodeLabel(audit));
+        }
+        if (isFormAttachmentAudit(audit)) {
+            return switch (audit.getAction()) {
+                case EVIDENCE_UPLOADED ->
+                        "Se adjunto el archivo %s en el formulario de la actividad %s por %s."
+                                .formatted(resolveMetadataValue(audit, "fileName", "sin nombre"), resolveNodeLabel(audit), actor);
+                case EVIDENCE_DELETED ->
+                        "Se elimino el archivo %s del formulario de la actividad %s."
+                                .formatted(resolveMetadataValue(audit, "fileName", "sin nombre"), resolveNodeLabel(audit));
+                default -> "";
+            };
+        }
 
         return switch (audit.getAction()) {
             case PROCEDURE_STARTED ->
@@ -166,21 +191,46 @@ public class ProcedureAuditServiceImpl implements ProcedureAuditService {
             case EVIDENCE_UPLOADED, EVIDENCE_DELETED -> {
                 String fileName = resolveMetadataValue(audit, "fileName", "");
                 String fieldName = resolveMetadataValue(audit, "fieldName", "");
+                String scope = isFormAttachmentAudit(audit) ? "FORM_FIELD" : "GLOBAL";
                 if (fileName.isBlank() && fieldName.isBlank()) {
+                    yield Map.of("scope", scope);
+                }
+                if (fieldName.isBlank() && fileName.isBlank()) {
                     yield Map.of();
                 }
                 if (fieldName.isBlank()) {
-                    yield Map.of("fileName", fileName);
+                    yield Map.of(
+                            "scope", scope,
+                            "fileName", fileName
+                    );
                 }
                 if (fileName.isBlank()) {
-                    yield Map.of("fieldName", fieldName);
+                    yield Map.of(
+                            "scope", scope,
+                            "fieldName", fieldName
+                    );
                 }
                 yield Map.of(
+                        "scope", scope,
                         "fileName", fileName,
                         "fieldName", fieldName
                 );
             }
             default -> Map.of();
         };
+    }
+
+    private boolean isProcedureCompletionAudit(ProcedureAudit audit) {
+        return (audit.getAction() == ProcedureAuditAction.TASK_COMPLETED
+                || audit.getAction() == ProcedureAuditAction.TASK_APPROVED)
+                && audit.getStatusAfter() == ProcedureStatus.COMPLETED;
+    }
+
+    private boolean isFormAttachmentAudit(ProcedureAudit audit) {
+        String fieldName = resolveMetadataValue(audit, "fieldName", "");
+        return (audit.getAction() == ProcedureAuditAction.EVIDENCE_UPLOADED
+                || audit.getAction() == ProcedureAuditAction.EVIDENCE_DELETED)
+                && (!fieldName.isBlank()
+                || (audit.getNodeId() != null && !audit.getNodeId().isBlank()));
     }
 }

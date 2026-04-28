@@ -68,6 +68,16 @@ public class ProcedureTrackingServiceImpl implements ProcedureTrackingService {
     }
 
     private String resolveTitle(ProcedureAudit audit) {
+        if (isProcedureCompletionAudit(audit)) {
+            return "Tramite finalizado";
+        }
+        if (isFormAttachmentAudit(audit)) {
+            return switch (audit.getAction()) {
+                case EVIDENCE_UPLOADED -> "Adjunto de formulario cargado";
+                case EVIDENCE_DELETED -> "Adjunto de formulario eliminado";
+                default -> "";
+            };
+        }
         return switch (audit.getAction()) {
             case PROCEDURE_STARTED -> "Tramite iniciado";
             case TASK_CLAIMED -> "Tarea tomada";
@@ -85,6 +95,21 @@ public class ProcedureTrackingServiceImpl implements ProcedureTrackingService {
         String actor = audit.getUsername() == null || audit.getUsername().isBlank()
                 ? "el sistema"
                 : audit.getUsername();
+
+        if (isProcedureCompletionAudit(audit)) {
+            return "El tramite fue finalizado por %s en la actividad %s.".formatted(actor, resolveNodeLabel(audit));
+        }
+        if (isFormAttachmentAudit(audit)) {
+            return switch (audit.getAction()) {
+                case EVIDENCE_UPLOADED ->
+                        "Se adjunto el archivo %s en el formulario de la actividad %s por %s."
+                                .formatted(resolveMetadataValue(audit, "fileName", "sin nombre"), resolveNodeLabel(audit), actor);
+                case EVIDENCE_DELETED ->
+                        "Se elimino el archivo %s del formulario de la actividad %s."
+                                .formatted(resolveMetadataValue(audit, "fileName", "sin nombre"), resolveNodeLabel(audit));
+                default -> "";
+            };
+        }
 
         return switch (audit.getAction()) {
             case PROCEDURE_STARTED ->
@@ -108,6 +133,18 @@ public class ProcedureTrackingServiceImpl implements ProcedureTrackingService {
         };
     }
 
+    private String resolveMetadataValue(ProcedureAudit audit, String key, String fallback) {
+        if (audit.getMetadata() == null) {
+            return fallback;
+        }
+        Object value = audit.getMetadata().get(key);
+        if (value == null) {
+            return fallback;
+        }
+        String text = value.toString().trim();
+        return text.isEmpty() ? fallback : text;
+    }
+
     private String resolveNodeLabel(ProcedureAudit audit) {
         if (audit.getNodeName() != null && !audit.getNodeName().isBlank()) {
             return audit.getNodeName();
@@ -116,5 +153,19 @@ public class ProcedureTrackingServiceImpl implements ProcedureTrackingService {
             return audit.getNodeId();
         }
         return "actual";
+    }
+
+    private boolean isProcedureCompletionAudit(ProcedureAudit audit) {
+        return (audit.getAction() == ProcedureAuditAction.TASK_COMPLETED
+                || audit.getAction() == ProcedureAuditAction.TASK_APPROVED)
+                && audit.getStatusAfter() == ProcedureStatus.COMPLETED;
+    }
+
+    private boolean isFormAttachmentAudit(ProcedureAudit audit) {
+        String fieldName = resolveMetadataValue(audit, "fieldName", "");
+        return (audit.getAction() == ProcedureAuditAction.EVIDENCE_UPLOADED
+                || audit.getAction() == ProcedureAuditAction.EVIDENCE_DELETED)
+                && (!fieldName.isBlank()
+                || (audit.getNodeId() != null && !audit.getNodeId().isBlank()));
     }
 }

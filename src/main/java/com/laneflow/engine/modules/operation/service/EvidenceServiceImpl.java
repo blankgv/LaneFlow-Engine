@@ -4,6 +4,7 @@ import com.laneflow.engine.core.storage.StorageService;
 import com.laneflow.engine.core.storage.StoredObject;
 import com.laneflow.engine.modules.operation.model.Evidence;
 import com.laneflow.engine.modules.operation.model.Procedure;
+import com.laneflow.engine.modules.operation.model.enums.ProcedureStatus;
 import com.laneflow.engine.modules.operation.model.enums.EvidenceCategory;
 import com.laneflow.engine.modules.operation.repository.EvidenceRepository;
 import com.laneflow.engine.modules.operation.repository.ProcedureRepository;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.text.Normalizer;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -67,29 +69,30 @@ public class EvidenceServiceImpl implements EvidenceService {
         Procedure procedure = procedureRepository.findById(procedureId)
                 .orElseThrow(() -> new IllegalArgumentException("Tramite no encontrado: " + procedureId));
 
-        validateEvidenceContext(procedure, taskId, nodeId);
-
-        FieldContext fieldContext = resolveFieldContext(procedure, nodeId, fieldName);
-        validateFileConfig(file, fieldContext.field());
+        EvidenceUploadContext uploadContext = resolveUploadContext(procedure, taskId, nodeId, fieldName, category);
+        if (uploadContext.fieldContext() != null) {
+            validateFileConfig(file, uploadContext.fieldContext().field());
+        }
 
         String originalFileName = resolveOriginalFileName(file);
         String extension = resolveExtension(originalFileName);
         String objectName = buildObjectName(
                 procedureId,
-                nodeId,
-                fieldName,
+                uploadContext.nodeId(),
+                uploadContext.fieldName(),
                 originalFileName,
-                fieldContext.field().getFileConfig()
+                uploadContext.fileConfig(),
+                uploadContext.category()
         );
         StoredObject stored = storageService.upload(file, objectName);
 
         Evidence saved = evidenceRepository.save(Evidence.builder()
                 .procedureId(procedureId)
-                .taskId(trimToNull(taskId))
-                .nodeId(nodeId)
-                .formId(fieldContext.form().getId())
-                .fieldId(fieldContext.field().getId())
-                .fieldName(fieldName)
+                .taskId(uploadContext.taskId())
+                .nodeId(uploadContext.nodeId())
+                .formId(uploadContext.formId())
+                .fieldId(uploadContext.fieldId())
+                .fieldName(uploadContext.fieldName())
                 .uploadedBy(uploadedBy)
                 .fileName(objectName.substring(objectName.lastIndexOf('/') + 1))
                 .originalFileName(originalFileName)
@@ -101,7 +104,7 @@ public class EvidenceServiceImpl implements EvidenceService {
                 .storagePath(stored.objectName())
                 .mediaLink(stored.mediaLink())
                 .description(trimToNull(description))
-                .category(resolveCategory(category, fieldContext.field()))
+                .category(uploadContext.category())
                 .build());
 
         procedureAuditService.record(
@@ -109,17 +112,12 @@ public class EvidenceServiceImpl implements EvidenceService {
                 ProcedureAuditAction.EVIDENCE_UPLOADED,
                 "Evidencia cargada al almacenamiento.",
                 uploadedBy,
-                trimToNull(taskId),
-                nodeId,
+                uploadContext.taskId(),
+                uploadContext.nodeId(),
                 null,
                 procedure.getStatus(),
                 procedure.getStatus(),
-                java.util.Map.of(
-                        "evidenceId", saved.getId(),
-                        "fieldName", saved.getFieldName(),
-                        "fileName", saved.getOriginalFileName(),
-                        "storagePath", saved.getStoragePath()
-                )
+                buildEvidenceAuditDetails(saved)
         );
 
         return toResponse(saved);
@@ -163,12 +161,7 @@ public class EvidenceServiceImpl implements EvidenceService {
                 null,
                 procedure.getStatus(),
                 procedure.getStatus(),
-                java.util.Map.of(
-                        "evidenceId", evidence.getId(),
-                        "fieldName", evidence.getFieldName(),
-                        "fileName", evidence.getOriginalFileName(),
-                        "storagePath", evidence.getStoragePath()
-                )
+                buildEvidenceAuditDetails(evidence)
         );
     }
 
@@ -199,6 +192,52 @@ public class EvidenceServiceImpl implements EvidenceService {
         return new FieldContext(form, field);
     }
 
+    private EvidenceUploadContext resolveUploadContext(Procedure procedure,
+                                                       String taskId,
+                                                       String nodeId,
+                                                       String fieldName,
+                                                       EvidenceCategory requestedCategory) {
+        String normalizedTaskId = trimToNull(taskId);
+        String normalizedNodeId = trimToNull(nodeId);
+        String normalizedFieldName = trimToNull(fieldName);
+
+        boolean hasNode = normalizedNodeId != null;
+        boolean hasField = normalizedFieldName != null;
+        if (hasNode != hasField) {
+            throw new IllegalArgumentException("nodeId y fieldName deben enviarse juntos para evidencia ligada a formulario.");
+        }
+
+        if (!hasNode) {
+            if (normalizedTaskId != null) {
+                throw new IllegalArgumentException("taskId solo se permite cuando la evidencia pertenece a una tarea/nodo.");
+            }
+            validateGlobalEvidenceContext(procedure);
+            return new EvidenceUploadContext(
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    resolveCategory(requestedCategory, null),
+                    null
+            );
+        }
+
+        validateEvidenceContext(procedure, normalizedTaskId, normalizedNodeId);
+        FieldContext fieldContext = resolveFieldContext(procedure, normalizedNodeId, normalizedFieldName);
+        return new EvidenceUploadContext(
+                normalizedTaskId,
+                normalizedNodeId,
+                normalizedFieldName,
+                fieldContext.form().getId(),
+                fieldContext.field().getId(),
+                fieldContext.field().getFileConfig(),
+                resolveCategory(requestedCategory, fieldContext.field()),
+                fieldContext
+        );
+    }
+
     private void validateEvidenceContext(Procedure procedure, String taskId, String nodeId) {
         if (procedure.getCurrentTaskId() != null && !procedure.getCurrentTaskId().isBlank()) {
             if (taskId == null || taskId.isBlank()) {
@@ -221,6 +260,14 @@ public class EvidenceServiceImpl implements EvidenceService {
         }
 
         throw new IllegalArgumentException("No se puede adjuntar evidencia cuando el tramite no tiene una etapa habilitada.");
+    }
+
+    private void validateGlobalEvidenceContext(Procedure procedure) {
+        if (procedure.getStatus() == ProcedureStatus.COMPLETED
+                || procedure.getStatus() == ProcedureStatus.REJECTED
+                || procedure.getStatus() == ProcedureStatus.CANCELLED) {
+            throw new IllegalArgumentException("No se puede adjuntar evidencia global a un tramite cerrado.");
+        }
     }
 
     private void validateFileConfig(MultipartFile file, FormField field) {
@@ -251,23 +298,29 @@ public class EvidenceServiceImpl implements EvidenceService {
                                    String nodeId,
                                    String fieldName,
                                    String originalFileName,
-                                   FileConfig config) {
+                                   FileConfig config,
+                                   EvidenceCategory category) {
         String extension = resolveExtension(originalFileName);
         String safeName = sanitizeFileName(stripExtension(originalFileName));
         String fileName = UUID.randomUUID() + "-" + safeName + (extension.isBlank() ? "" : "." + extension);
         StringBuilder objectName = new StringBuilder(trimSlashes(evidencePrefix))
                 .append("/")
                 .append(procedureId)
-                .append("/")
-                .append(nodeId)
                 .append("/");
 
-        String bucketFolder = config != null ? trimToNull(config.getBucketFolder()) : null;
-        if (bucketFolder != null) {
-            objectName.append(trimSlashes(bucketFolder)).append("/");
+        if (nodeId != null && fieldName != null) {
+            objectName.append(nodeId).append("/");
+            String bucketFolder = config != null ? trimToNull(config.getBucketFolder()) : null;
+            if (bucketFolder != null) {
+                objectName.append(trimSlashes(bucketFolder)).append("/");
+            }
+            objectName.append(fieldName).append("/");
+        } else {
+            objectName.append("procedure/")
+                    .append(category != null ? category.name().toLowerCase(Locale.ROOT) : "general")
+                    .append("/");
         }
-
-        objectName.append(fieldName).append("/").append(fileName);
+        objectName.append(fileName);
         return objectName.toString();
     }
 
@@ -319,11 +372,25 @@ public class EvidenceServiceImpl implements EvidenceService {
             return category;
         }
 
+        if (field == null) {
+            return EvidenceCategory.GENERAL;
+        }
+
         return switch (field.getType()) {
             case IMAGE, PHOTO -> EvidenceCategory.PHOTO;
             case DOCUMENT -> EvidenceCategory.SUPPORT_DOCUMENT;
             default -> EvidenceCategory.GENERAL;
         };
+    }
+
+    private java.util.Map<String, Object> buildEvidenceAuditDetails(Evidence evidence) {
+        java.util.Map<String, Object> details = new LinkedHashMap<>();
+        details.put("evidenceId", evidence.getId());
+        details.put("fieldName", evidence.getFieldName());
+        details.put("fileName", evidence.getOriginalFileName());
+        details.put("storagePath", evidence.getStoragePath());
+        details.put("category", evidence.getCategory() != null ? evidence.getCategory().name() : null);
+        return details;
     }
 
     private EvidenceResponse toResponse(Evidence e) {
@@ -352,4 +419,13 @@ public class EvidenceServiceImpl implements EvidenceService {
     }
 
     private record FieldContext(DynamicForm form, FormField field) {}
+
+    private record EvidenceUploadContext(String taskId,
+                                         String nodeId,
+                                         String fieldName,
+                                         String formId,
+                                         String fieldId,
+                                         FileConfig fileConfig,
+                                         EvidenceCategory category,
+                                         FieldContext fieldContext) {}
 }
