@@ -64,8 +64,14 @@ public class TaskServiceImpl implements TaskService {
                 .taskUnassigned()
                 .list()
                 .stream()
-                .filter(task -> canClaim(task, staff))
-                .map(this::toResponse)
+                .flatMap(task -> {
+                    try {
+                        if (!canClaim(task, staff)) return java.util.stream.Stream.empty();
+                        return java.util.stream.Stream.of(toResponse(task));
+                    } catch (Exception e) {
+                        return java.util.stream.Stream.empty();
+                    }
+                })
                 .toList();
     }
 
@@ -76,7 +82,13 @@ public class TaskServiceImpl implements TaskService {
                 .taskAssignee(username)
                 .list()
                 .stream()
-                .map(this::toResponse)
+                .flatMap(task -> {
+                    try {
+                        return java.util.stream.Stream.of(toResponse(task));
+                    } catch (Exception e) {
+                        return java.util.stream.Stream.empty();
+                    }
+                })
                 .toList();
     }
 
