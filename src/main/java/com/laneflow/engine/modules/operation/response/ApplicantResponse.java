@@ -19,5 +19,8 @@ public record ApplicantResponse(
         String address,
         boolean active,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        String userId,
+        String username,
+        String initialPassword
 ) {}

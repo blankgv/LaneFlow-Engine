@@ -39,16 +39,17 @@ public class DataSeeder implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         seedDepartments();
-        seedStaff();
         seedRoles();
-        syncAllRolePermissionsForTesting();
+        seedStaff();
         seedUsers();
         seedApplicants();
     }
 
+    // ─── Departments ──────────────────────────────────────────────────────────
+
     private void seedDepartments() {
         if (departmentRepository.count() > 0) {
-            log.info("Departamentos ya existen, omitiendo seed.");
+            log.info("Departments already exist, skipping.");
             return;
         }
         Department ti = departmentRepository.save(dept("TI", "Tecnología de Información", null));
@@ -62,53 +63,93 @@ public class DataSeeder implements ApplicationRunner {
                 dept("LEG",  "Legal",               null),
                 dept("ATC",  "Atención al Cliente", null)
         ));
-        log.info("Seed: 9 departamentos insertados.");
+        log.info("Seed: 9 departments inserted.");
     }
+
+    // ─── Roles ────────────────────────────────────────────────────────────────
+
+    private void seedRoles() {
+        if (roleRepository.count() > 0) {
+            log.info("Roles already exist, skipping.");
+            return;
+        }
+
+        List<String> funcionarioPerms = List.of(
+                Permission.TRAMITE_READ,
+                Permission.TRAMITE_WRITE
+        );
+
+        List<String> applicantPerms = List.of(
+                Permission.TRAMITE_READ
+        );
+
+        roleRepository.saveAll(List.of(
+                role("ADMINISTRADOR", "Administrador",
+                        "Acceso total al sistema",
+                        Permission.ALL),
+
+                role("SUPERVISOR", "Supervisor",
+                        "Supervisa tramites, flujos y reportes",
+                        Permission.ALL),
+
+                role("FUNCIONARIO", "Funcionario",
+                        "Gestiona tramites, solicitantes y tareas operativas",
+                        funcionarioPerms),
+
+                role("APPLICANT", "Solicitante",
+                        "Consulta sus propios tramites e historial",
+                        applicantPerms)
+        ));
+        log.info("Seed: 4 roles inserted (ADMINISTRADOR, SUPERVISOR, FUNCIONARIO, APPLICANT).");
+    }
+
+    // ─── Staff ────────────────────────────────────────────────────────────────
 
     private void seedStaff() {
         if (staffRepository.count() > 0) {
-            log.info("Personal ya existe, omitiendo seed.");
+            log.info("Staff already exists, skipping.");
             return;
         }
         Map<String, String> deptIds = departmentRepository.findAll().stream()
                 .collect(Collectors.toMap(Department::getCode, Department::getId));
 
         staffRepository.saveAll(List.of(
-                staff("EMP-001", "Carlos",  "Mendoza",  "c.mendoza@laneflow.com",  deptIds.get("MGMT")),
-                staff("EMP-002", "María",   "López",    "m.lopez@laneflow.com",    deptIds.get("RRHH")),
-                staff("EMP-003", "Andrés",  "Torres",   "a.torres@laneflow.com",   deptIds.get("DEV")),
-                staff("EMP-004", "Lucía",   "Ramírez",  "l.ramirez@laneflow.com",  deptIds.get("FIN")),
-                staff("EMP-005", "Diego",   "Herrera",  "d.herrera@laneflow.com",  deptIds.get("ATC")),
-                staff("EMP-006", "Sofía",   "Vargas",   "s.vargas@laneflow.com",   deptIds.get("OPS")),
-                staff("EMP-007", "Roberto", "Castro",   "r.castro@laneflow.com",   deptIds.get("LEG"))
+                // MGMT — 2
+                staff("EMP-001", "Carlos",    "Mendoza",    "c.mendoza@laneflow.com",   deptIds.get("MGMT")),
+                staff("EMP-010", "Ana",        "García",     "a.garcia@laneflow.com",    deptIds.get("MGMT")),
+                // RRHH — 2
+                staff("EMP-002", "María",      "López",      "m.lopez@laneflow.com",     deptIds.get("RRHH")),
+                staff("EMP-011", "Pedro",      "Sánchez",    "p.sanchez@laneflow.com",   deptIds.get("RRHH")),
+                // DEV — 2
+                staff("EMP-003", "Andrés",     "Torres",     "a.torres@laneflow.com",    deptIds.get("DEV")),
+                staff("EMP-012", "Carolina",   "Reyes",      "c.reyes@laneflow.com",     deptIds.get("DEV")),
+                // INF — 2
+                staff("EMP-013", "Felipe",     "Morales",    "f.morales@laneflow.com",   deptIds.get("INF")),
+                staff("EMP-014", "Daniela",    "Cruz",       "d.cruz@laneflow.com",      deptIds.get("INF")),
+                // FIN — 2
+                staff("EMP-004", "Lucía",      "Ramírez",    "l.ramirez@laneflow.com",   deptIds.get("FIN")),
+                staff("EMP-015", "Miguel",     "Flores",     "m.flores@laneflow.com",    deptIds.get("FIN")),
+                // OPS — 2
+                staff("EMP-006", "Sofía",      "Vargas",     "s.vargas@laneflow.com",    deptIds.get("OPS")),
+                staff("EMP-016", "Patricia",   "Vega",       "p.vega@laneflow.com",      deptIds.get("OPS")),
+                // LEG — 2
+                staff("EMP-007", "Roberto",    "Castro",     "r.castro@laneflow.com",    deptIds.get("LEG")),
+                staff("EMP-017", "Isabel",     "Navarro",    "i.navarro@laneflow.com",   deptIds.get("LEG")),
+                // ATC — 2
+                staff("EMP-005", "Diego",      "Herrera",    "d.herrera@laneflow.com",   deptIds.get("ATC")),
+                staff("EMP-018", "Valentina",  "Torres",     "v.torres@laneflow.com",    deptIds.get("ATC")),
+                // TI — 2
+                staff("EMP-019", "Hugo",       "Blanco",     "h.blanco@laneflow.com",    deptIds.get("TI")),
+                staff("EMP-020", "Natalia",    "Pérez",      "n.perez@laneflow.com",     deptIds.get("TI"))
         ));
-        log.info("Seed: 7 miembros de personal insertados.");
+        log.info("Seed: 18 staff members inserted (2 per department).");
     }
 
-    private void seedRoles() {
-        if (roleRepository.count() > 0) {
-            log.info("Roles ya existen, omitiendo seed.");
-            return;
-        }
-        roleRepository.saveAll(List.of(
-                role("ADMINISTRADOR", "Administrador",    "Acceso total al sistema", Permission.ALL),
-                role("FUNCIONARIO",   "Funcionario",      "Ejecuta trámites",
-                        List.of(Permission.DEPT_READ, Permission.STAFF_READ,
-                                Permission.TRAMITE_READ, Permission.TRAMITE_WRITE)),
-                role("SUPERVISOR",    "Supervisor",       "Supervisa trámites y reportes",
-                        List.of(Permission.DEPT_READ, Permission.STAFF_READ,
-                                Permission.TRAMITE_READ, Permission.TRAMITE_WRITE,
-                                Permission.WORKFLOW_READ, Permission.WORKFLOW_WRITE,
-                                Permission.REPORT_READ)),
-                role("SOLICITANTE",   "Solicitante",      "Inicia y consulta sus trámites",
-                        List.of(Permission.TRAMITE_READ, Permission.TRAMITE_WRITE))
-        ));
-        log.info("Seed: 4 roles insertados.");
-    }
+    // ─── Users ────────────────────────────────────────────────────────────────
 
     private void seedUsers() {
         if (userRepository.count() > 0) {
-            log.info("Usuarios ya existen, omitiendo seed.");
+            log.info("Users already exist, skipping.");
             return;
         }
 
@@ -117,64 +158,144 @@ public class DataSeeder implements ApplicationRunner {
         Map<String, String> staffIds = staffRepository.findAll().stream()
                 .collect(Collectors.toMap(Staff::getCode, Staff::getId));
 
-        String encoded = passwordEncoder.encode("passw0rd");
+        String pw = passwordEncoder.encode("password");
+
+        String adminRole  = roleIds.get("ADMINISTRADOR");
+        String supRole    = roleIds.get("SUPERVISOR");
+        String funcRole   = roleIds.get("FUNCIONARIO");
 
         userRepository.saveAll(List.of(
-                user("admin",    "emanuel.gutierrez.vasquez@gmail.com", null,                    roleIds.get("ADMINISTRADOR"), encoded),
-                user("cmendoza", "c.mendoza@laneflow.com",    staffIds.get("EMP-001"), roleIds.get("SUPERVISOR"),    encoded),
-                user("mlopez",   "m.lopez@laneflow.com",      staffIds.get("EMP-002"), roleIds.get("SUPERVISOR"),    encoded),
-                user("atorres",  "a.torres@laneflow.com",     staffIds.get("EMP-003"), roleIds.get("FUNCIONARIO"),   encoded),
-                user("lramirez", "l.ramirez@laneflow.com",    staffIds.get("EMP-004"), roleIds.get("FUNCIONARIO"),   encoded),
-                user("dherrera", "d.herrera@laneflow.com",    staffIds.get("EMP-005"), roleIds.get("FUNCIONARIO"),   encoded),
-                user("jperez",   "j.perez@external.com",      null,                    roleIds.get("SOLICITANTE"),   encoded),
-                user("svargas",  "s.vargas@laneflow.com",     staffIds.get("EMP-006"), roleIds.get("FUNCIONARIO"),   encoded),
-                user("rcastro",  "r.castro@laneflow.com",     staffIds.get("EMP-007"), roleIds.get("SUPERVISOR"),    encoded)
+                // ── Sistema ──────────────────────────────────────────────────
+                user("admin",     "admin@laneflow.com",           null,                    adminRole, pw),
+
+                // ── MGMT (Supervisors) ────────────────────────────────────────
+                user("cmendoza",  "c.mendoza@laneflow.com",       staffIds.get("EMP-001"), supRole,   pw),
+                user("agarcia",   "a.garcia@laneflow.com",        staffIds.get("EMP-010"), supRole,   pw),
+
+                // ── RRHH (Supervisors) ────────────────────────────────────────
+                user("mlopez",    "m.lopez@laneflow.com",         staffIds.get("EMP-002"), supRole,   pw),
+                user("psanchez",  "p.sanchez@laneflow.com",       staffIds.get("EMP-011"), supRole,   pw),
+
+                // ── DEV (Funcionarios) ────────────────────────────────────────
+                user("atorres",   "a.torres@laneflow.com",        staffIds.get("EMP-003"), funcRole,  pw),
+                user("creyes",    "c.reyes@laneflow.com",         staffIds.get("EMP-012"), funcRole,  pw),
+
+                // ── INF (Funcionarios) ────────────────────────────────────────
+                user("fmorales",  "f.morales@laneflow.com",       staffIds.get("EMP-013"), funcRole,  pw),
+                user("dcruz",     "d.cruz@laneflow.com",          staffIds.get("EMP-014"), funcRole,  pw),
+
+                // ── FIN (Funcionarios) ────────────────────────────────────────
+                user("lramirez",  "l.ramirez@laneflow.com",       staffIds.get("EMP-004"), funcRole,  pw),
+                user("mflores",   "m.flores@laneflow.com",        staffIds.get("EMP-015"), funcRole,  pw),
+
+                // ── OPS (Funcionarios) ────────────────────────────────────────
+                user("svargas",   "s.vargas@laneflow.com",        staffIds.get("EMP-006"), funcRole,  pw),
+                user("pvega",     "p.vega@laneflow.com",          staffIds.get("EMP-016"), funcRole,  pw),
+
+                // ── LEG (Supervisors) ─────────────────────────────────────────
+                user("rcastro",   "r.castro@laneflow.com",        staffIds.get("EMP-007"), supRole,   pw),
+                user("inavarro",  "i.navarro@laneflow.com",       staffIds.get("EMP-017"), supRole,   pw),
+
+                // ── ATC (Funcionarios) ────────────────────────────────────────
+                user("dherrera",  "d.herrera@laneflow.com",       staffIds.get("EMP-005"), funcRole,  pw),
+                user("vtorres",   "v.torres@laneflow.com",        staffIds.get("EMP-018"), funcRole,  pw),
+
+                // ── TI (Administradores) ──────────────────────────────────────
+                user("hblanco",   "h.blanco@laneflow.com",        staffIds.get("EMP-019"), adminRole, pw),
+                user("nperez",    "n.perez@laneflow.com",         staffIds.get("EMP-020"), adminRole, pw)
         ));
-
-        log.info("Seed: 8 usuarios creados (password: passw0rd).");
+        log.info("Seed: 19 users inserted (password: password).");
     }
 
-    private void syncAllRolePermissionsForTesting() {
-        List<Role> roles = roleRepository.findAll();
-        if (roles.isEmpty()) {
-            return;
-        }
-
-        boolean updated = false;
-        for (Role role : roles) {
-            if (!Permission.ALL.equals(role.getPermissions())) {
-                role.setPermissions(Permission.ALL);
-                role.setUpdatedAt(java.time.LocalDateTime.now());
-                updated = true;
-            }
-        }
-
-        if (updated) {
-            roleRepository.saveAll(roles);
-            log.info("Permisos de prueba aplicados: todos los roles ahora usan Permission.ALL.");
-        } else {
-            log.info("Permisos de prueba ya estaban aplicados a todos los roles.");
-        }
-    }
+    // ─── Applicants + their portal users ─────────────────────────────────────
 
     private void seedApplicants() {
         if (applicantRepository.count() > 0) {
-            log.info("Solicitantes ya existen, omitiendo seed.");
+            log.info("Applicants already exist, skipping.");
             return;
         }
 
-        applicantRepository.saveAll(List.of(
-                naturalApplicant("CI", "1001001", "Juan", "Perez", "juan.perez@example.com", "70010001"),
-                naturalApplicant("CI", "1001002", "Ana", "Rojas", "ana.rojas@example.com", "70010002"),
-                naturalApplicant("PASSPORT", "P-1001003", "Luis", "Fernandez", "luis.fernandez@example.com", "70010003"),
-                legalApplicant("NIT", "2002002001", "Constructora Andina SRL", "Marta Salinas",
-                        "contacto@andina.example.com", "71020001"),
-                legalApplicant("NIT", "2002002002", "Servicios Delta SA", "Roberto Vargas",
-                        "contacto@delta.example.com", "71020002")
-        ));
+        String applicantRoleId = roleRepository.findByCode("APPLICANT")
+                .map(Role::getId)
+                .orElse(null);
 
-        log.info("Seed: 5 solicitantes insertados.");
+        // Natural persons
+        createApplicantWithUser(
+                naturalApplicant("CI", "1001001", "Juan", "Perez",
+                        "juan.perez@example.com", "70010001"),
+                applicantRoleId);
+
+        createApplicantWithUser(
+                naturalApplicant("CI", "1001002", "Ana", "Rojas",
+                        "ana.rojas@example.com", "70010002"),
+                applicantRoleId);
+
+        createApplicantWithUser(
+                naturalApplicant("PASSPORT", "P-1001003", "Luis", "Fernandez",
+                        "luis.fernandez@example.com", "70010003"),
+                applicantRoleId);
+
+        createApplicantWithUser(
+                naturalApplicant("CI", "1001004", "Carmen", "Villanueva",
+                        "carmen.villanueva@example.com", "70010004"),
+                applicantRoleId);
+
+        createApplicantWithUser(
+                naturalApplicant("CI", "1001005", "Jorge", "Mamani",
+                        "jorge.mamani@example.com", "70010005"),
+                applicantRoleId);
+
+        // Legal entities
+        createApplicantWithUser(
+                legalApplicant("NIT", "2002002001", "Constructora Andina SRL",
+                        "Marta Salinas", "contacto@andina.example.com", "71020001"),
+                applicantRoleId);
+
+        createApplicantWithUser(
+                legalApplicant("NIT", "2002002002", "Servicios Delta SA",
+                        "Roberto Vargas", "contacto@delta.example.com", "71020002"),
+                applicantRoleId);
+
+        createApplicantWithUser(
+                legalApplicant("NIT", "2002002003", "Importaciones Norte SRL",
+                        "Elena Quispe", "contacto@norte.example.com", "71020003"),
+                applicantRoleId);
+
+        createApplicantWithUser(
+                legalApplicant("NIT", "2002002004", "Tecnología Sur SA",
+                        "Marco Ríos", "contacto@sur.example.com", "71020004"),
+                applicantRoleId);
+
+        log.info("Seed: 9 applicants inserted with linked portal users.");
+        log.info("Applicant passwords = document number (lowercase).");
     }
+
+    /**
+     * Saves the applicant and creates a linked User for mobile/portal access.
+     * Username = documentNumber.toLowerCase(), password = documentNumber (raw).
+     */
+    private void createApplicantWithUser(Applicant applicant, String applicantRoleId) {
+        Applicant saved = applicantRepository.save(applicant);
+
+        String username = saved.getDocumentNumber().toLowerCase();
+        if (userRepository.existsByUsername(username)) {
+            return;
+        }
+
+        User.UserBuilder builder = User.builder()
+                .username(username)
+                .password(passwordEncoder.encode(saved.getDocumentNumber()))
+                .applicantId(saved.getId())
+                .roleId(applicantRoleId);
+
+        if (saved.getEmail() != null) {
+            builder.email(saved.getEmail());
+        }
+
+        userRepository.save(builder.build());
+    }
+
+    // ─── Builders ─────────────────────────────────────────────────────────────
 
     private Department dept(String code, String name, String parentId) {
         return Department.builder().code(code).name(name).parentId(parentId).build();
@@ -191,7 +312,8 @@ public class DataSeeder implements ApplicationRunner {
                 .permissions(permissions).build();
     }
 
-    private User user(String username, String email, String staffId, String roleId, String encodedPassword) {
+    private User user(String username, String email, String staffId,
+                      String roleId, String encodedPassword) {
         return User.builder()
                 .username(username)
                 .password(encodedPassword)
@@ -201,8 +323,9 @@ public class DataSeeder implements ApplicationRunner {
                 .build();
     }
 
-    private Applicant naturalApplicant(String documentType, String documentNumber, String firstName,
-                                       String lastName, String email, String phone) {
+    private Applicant naturalApplicant(String documentType, String documentNumber,
+                                       String firstName, String lastName,
+                                       String email, String phone) {
         return Applicant.builder()
                 .type(ApplicantType.NATURAL_PERSON)
                 .documentType(DocumentType.valueOf(documentType))
@@ -211,12 +334,13 @@ public class DataSeeder implements ApplicationRunner {
                 .lastName(lastName)
                 .email(email)
                 .phone(phone)
-                .address("Sin direccion registrada")
+                .address("Sin dirección registrada")
                 .build();
     }
 
-    private Applicant legalApplicant(String documentType, String documentNumber, String businessName,
-                                     String legalRepresentative, String email, String phone) {
+    private Applicant legalApplicant(String documentType, String documentNumber,
+                                     String businessName, String legalRepresentative,
+                                     String email, String phone) {
         return Applicant.builder()
                 .type(ApplicantType.LEGAL_ENTITY)
                 .documentType(DocumentType.valueOf(documentType))
@@ -225,8 +349,7 @@ public class DataSeeder implements ApplicationRunner {
                 .legalRepresentative(legalRepresentative)
                 .email(email)
                 .phone(phone)
-                .address("Sin direccion registrada")
+                .address("Sin dirección registrada")
                 .build();
     }
 }
-

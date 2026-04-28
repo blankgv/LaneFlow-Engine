@@ -1,21 +1,30 @@
 package com.laneflow.engine.modules.operation.service;
 
+import com.laneflow.engine.modules.admin.model.Role;
+import com.laneflow.engine.modules.admin.model.User;
+import com.laneflow.engine.modules.admin.repository.RoleRepository;
+import com.laneflow.engine.modules.admin.repository.UserRepository;
 import com.laneflow.engine.modules.operation.model.Applicant;
 import com.laneflow.engine.modules.operation.model.enums.ApplicantType;
 import com.laneflow.engine.modules.operation.repository.ApplicantRepository;
 import com.laneflow.engine.modules.operation.request.ApplicantRequest;
 import com.laneflow.engine.modules.operation.response.ApplicantResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class ApplicantServiceImpl implements ApplicantService {
 
     private final ApplicantRepository repository;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     public ApplicantResponse create(ApplicantRequest request) {
@@ -39,7 +48,8 @@ public class ApplicantServiceImpl implements ApplicantService {
                 .address(trimToNull(request.address()))
                 .build());
 
-        return toResponse(saved);
+        String initialPassword = createApplicantUser(saved);
+        return toResponseWithCredentials(saved, initialPassword);
     }
 
     @Override
@@ -111,6 +121,7 @@ public class ApplicantServiceImpl implements ApplicantService {
     }
 
     private ApplicantResponse toResponse(Applicant a) {
+        Optional<User> user = userRepository.findByApplicantId(a.getId());
         return new ApplicantResponse(
                 a.getId(),
                 a.getType(),
@@ -125,8 +136,60 @@ public class ApplicantServiceImpl implements ApplicantService {
                 a.getAddress(),
                 a.isActive(),
                 a.getCreatedAt(),
-                a.getUpdatedAt()
+                a.getUpdatedAt(),
+                user.map(User::getId).orElse(null),
+                user.map(User::getUsername).orElse(null),
+                null
         );
+    }
+
+    private ApplicantResponse toResponseWithCredentials(Applicant a, String initialPassword) {
+        Optional<User> user = userRepository.findByApplicantId(a.getId());
+        return new ApplicantResponse(
+                a.getId(),
+                a.getType(),
+                a.getDocumentType(),
+                a.getDocumentNumber(),
+                a.getFirstName(),
+                a.getLastName(),
+                a.getBusinessName(),
+                a.getLegalRepresentative(),
+                a.getEmail(),
+                a.getPhone(),
+                a.getAddress(),
+                a.isActive(),
+                a.getCreatedAt(),
+                a.getUpdatedAt(),
+                user.map(User::getId).orElse(null),
+                user.map(User::getUsername).orElse(null),
+                initialPassword
+        );
+    }
+
+    /** Creates applicant user. Returns plaintext initial password, or null if user already existed. */
+    private String createApplicantUser(Applicant applicant) {
+        String username = applicant.getDocumentNumber().toLowerCase();
+        if (userRepository.existsByUsername(username)) {
+            return null;
+        }
+        String rawPassword = applicant.getDocumentNumber();
+        String roleId = roleRepository.findByCode("APPLICANT")
+                .map(Role::getId)
+                .orElse(null);
+
+        User.UserBuilder builder = User.builder()
+                .username(username)
+                .password(passwordEncoder.encode(rawPassword))
+                .applicantId(applicant.getId())
+                .roleId(roleId);
+
+        if (applicant.getEmail() != null) {
+            builder.email(applicant.getEmail());
+        }
+
+        userRepository.save(builder.build());
+
+        return rawPassword;
     }
 
     private String normalizeDocumentNumber(String value) {
